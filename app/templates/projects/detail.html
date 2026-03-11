@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}项目详情{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>{{ project.name }}</h1>
+    <p>{{ project.description or "暂无描述" }}</p>
+    <p class="muted">项目 ID：{{ project.id }}</p>
+    <p class="muted">创建时间：{{ project.created_at }}</p>
+    <div class="page-actions">
+        <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求</a>
+        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+        <a class="btn btn-secondary" href="/">返回首页</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}导入 Markdown 用例{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>导入 Markdown 用例</h1>
+    <p class="muted">上传在 Cursor 中完善好的 Xmind 兼容 Markdown 文件，系统会解析成测试用例并导入当前平台。</p>
+    <div class="page-actions">
+        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+        {% if selected_requirement_id %}
+        <a class="btn btn-secondary" href="/requirements/{{ selected_requirement_id }}">返回需求详情</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <form method="post" action="/testcases/import-markdown" enctype="multipart/form-data">
+        <label for="requirement_id">关联需求</label>
+        <select id="requirement_id" name="requirement_id" required>
+            <option value="">请选择需求</option>
+            {% for requirement in requirements %}
+            <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>
+                {{ requirement.project.name }} / {{ requirement.title }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label for="markdown_file">Markdown 文件</label>
+        <input id="markdown_file" name="markdown_file" type="file" accept=".md,.markdown,text/markdown" required>
+
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 400;">
+            <input type="checkbox" name="replace_existing" value="1" checked style="width: auto; margin: 0;">
+            导入前清空该需求下已有用例
+        </label>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">导入 Markdown 用例</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>推荐 Markdown 结构</h2>
+    <pre style="white-space: pre-wrap; margin: 0; font-family: inherit;"># 模块名称
+
+## 需求概览
+
+- 主流程目标描述
+- 核心业务规则描述
+
+## 业务拆解
+
+### 子场景一
+
+- 关键业务行为
+- 核心判断规则
+
+## 推荐测试点
+
+### 正常流程
+
+#### 验证用户正常完成主流程
+- 优先级：P1
+- 前置条件：系统配置正确，测试账号可用
+- 步骤：
+  1. 进入目标页面
+  2. 执行主流程操作
+  3. 观察系统响应
+- 预期结果：系统正确完成主流程并展示预期结果
+- 状态：draft
+
+### 边界条件
+
+#### 验证边界值配置生效
+- 优先级：P2
+- 前置条件：已准备边界值配置
+- 步骤：
+  1. 配置边界值
+  2. 执行业务操作
+  3. 校验边界表现
+- 预期结果：系统正确处理边界条件
+- 状态：draft</pre>
+</div>
+{% endblock %}

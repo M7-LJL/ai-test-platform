@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}需求详情{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>{{ requirement.title }}</h1>
+    <p class="muted">所属项目：{{ requirement.project.name }}</p>
+    <p class="muted">创建时间：{{ requirement.created_at }}</p>
+    {% if generated is not none %}
+    <p style="margin-top: 12px; color: #166534;">已成功生成 {{ generated }} 条用例草稿。</p>
+    {% endif %}
+    {% if imported is not none %}
+    <p style="margin-top: 12px; color: #166534;">已成功导入 {{ imported }} 条 Markdown 测试用例。</p>
+    {% endif %}
+    {% if reanalyzed is not none %}
+    <p style="margin-top: 12px; color: #1d4ed8;">已根据最新需求内容重新提取测试点。</p>
+    {% endif %}
+    <div class="page-actions">
+        <a class="btn" href="/requirements/{{ requirement.id }}/xmind-markdown">导出 Xmind Markdown</a>
+        <a class="btn" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入 Markdown 用例</a>
+        <a class="btn btn-secondary" href="/projects/{{ requirement.project.id }}">返回项目详情</a>
+        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>需求内容</h2>
+    <pre style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ requirement.content }}</pre>
+</div>
+
+<div class="card">
+    <h2>AI 提取测试点</h2>
+    <p class="muted">预计按当前规则生成约 {{ estimated_case_count }} 条测试用例。</p>
+    {% if requirement.parsed_points %}
+    <ul>
+        {% for point in requirement.parsed_points %}
+        <li>{{ point }}</li>
+        {% endfor %}
+    </ul>
+    <div class="page-actions">
+        <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin: 0;">
+            <button class="btn btn-secondary" type="submit">重新提取测试点</button>
+        </form>
+        <form method="post" action="/testcases/generate-from-requirement/{{ requirement.id }}" style="margin: 0;">
+            <button class="btn" type="submit">AI 生成用例</button>
+        </form>
+    </div>
+    {% else %}
+    <p class="muted">暂无</p>
+    <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin-top: 16px;">
+        <button class="btn btn-secondary" type="submit">重新提取测试点</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>已生成用例</h2>
+    {% if requirement.test_cases %}
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">用例ID</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">模块</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">优先级</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for testcase in requirement.test_cases %}
+            <tr>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.case_id }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.title }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.module or "-" }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.priority or "-" }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">当前还没有生成用例。</p>
+    {% endif %}
+</div>
+{% endblock %}

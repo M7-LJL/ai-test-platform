@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local environment files
+.env
+
+# Local databases
+*.db
+*.sqlite3
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE and editor files
+.idea/
+.vscode/
+
+# Local generated reports
+reports/*
+!reports/.gitkeep
+
+# Local Playwright MCP artifacts
+.playwright-mcp/
+
+# OS files
+.DS_Store
+Thumbs.db

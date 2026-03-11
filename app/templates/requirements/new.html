@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}新建需求{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>新建需求</h1>
+    <p class="muted">选择所属项目并填写需求信息，系统会自动提取测试点。</p>
+    <div class="page-actions">
+        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+        {% if selected_project_id %}
+        <a class="btn btn-secondary" href="/projects/{{ selected_project_id }}">返回项目详情</a>
+        {% endif %}
+    </div>
+
+    <form method="post" action="/requirements/">
+        <label for="project_id">选择项目</label>
+        <select id="project_id" name="project_id" required>
+            <option value="">请选择项目</option>
+            {% for project in projects %}
+            <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                {{ project.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label for="title">需求标题</label>
+        <input id="title" name="title" type="text" placeholder="请输入需求标题" required>
+
+        <label for="content">需求内容</label>
+        <textarea id="content" name="content" rows="10" placeholder="请输入需求内容" required></textarea>
+
+        <button class="btn" type="submit">保存需求</button>
+    </form>
+</div>
+{% endblock %}
