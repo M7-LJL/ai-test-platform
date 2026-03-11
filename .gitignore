@@ -4,17 +4,38 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
 # Virtual environments
 .venv/
 venv/
 env/
 
+# Archives and packages
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
 # Local environment files
 .env
 
-# Local databases
+# Local databases and logs
 *.db
+*.sqlite
 *.sqlite3
+*.sql
+*.log
 
 # Test and tooling caches
 .pytest_cache/
@@ -36,4 +57,9 @@ reports/*
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
