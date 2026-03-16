@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}编辑测试用例{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>编辑测试用例</h1>
+    <p class="muted">用例ID：{{ testcase.case_id }}</p>
+    <div class="page-actions">
+        {% if testcase.requirement_id %}
+        <a class="btn btn-secondary" href="/requirements/{{ testcase.requirement_id }}">返回需求详情</a>
+        {% endif %}
+        {% if testcase.project_id %}
+        <a class="btn btn-secondary" href="/projects/{{ testcase.project_id }}">返回项目详情</a>
+        {% endif %}
+        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="post" action="/testcases/{{ testcase.id }}/edit">
+        <label for="title">标题</label>
+        <input id="title" name="title" type="text" value="{{ testcase.title }}">
+
+        <label for="module">模块</label>
+        <input id="module" name="module" type="text" value="{{ testcase.module or '' }}">
+
+        <label for="priority">优先级</label>
+        <select id="priority" name="priority">
+            {% for item in ["P0", "P1", "P2"] %}
+            <option value="{{ item }}" {% if (testcase.priority or "P2") == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="case_type">用例类型</label>
+        <select id="case_type" name="case_type">
+            {% for item in ["正向", "边界", "异常"] %}
+            <option value="{{ item }}" {% if (testcase.case_type or "正向") == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="status">状态</label>
+        <select id="status" name="status">
+            {% for item in ["draft", "ready", "blocked", "done"] %}
+            <option value="{{ item }}" {% if (testcase.status or "draft") == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="requirement_source">需求依据</label>
+        <input id="requirement_source" name="requirement_source" type="text" value="{{ testcase.requirement_source or '' }}">
+
+        <label for="test_data">测试数据</label>
+        <textarea id="test_data" name="test_data" rows="4">{{ testcase.test_data or "" }}</textarea>
+
+        <label for="preconditions">前置条件</label>
+        <textarea id="preconditions" name="preconditions" rows="4">{{ testcase.preconditions or "" }}</textarea>
+
+        <label for="steps">执行步骤</label>
+        <textarea id="steps" name="steps" rows="8">{{ testcase.steps or "" }}</textarea>
+
+        <label for="expected">预期结果</label>
+        <textarea id="expected" name="expected" rows="6">{{ testcase.expected or "" }}</textarea>
+
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 400;">
+            <input type="checkbox" name="locked" value="1" {% if testcase.locked %}checked{% endif %} style="width: auto; margin: 0;">
+            锁定该用例，后续生成时保留人工修改结果
+        </label>
+
+        <h2 style="margin-top: 24px;">结构化补充信息</h2>
+        <p class="muted">如果填写以下字段，保存时会按结构化内容重新渲染用例描述。</p>
+
+        <label for="scene_name">场景名称</label>
+        <input id="scene_name" name="scene_name" type="text" value="{{ testcase.locked_case_data.scene_name or '' }}">
+
+        <label for="user_type">用户类型</label>
+        <input id="user_type" name="user_type" type="text" value="{{ testcase.locked_case_data.user_type or '' }}">
+
+        <label for="entry">入口</label>
+        <input id="entry" name="entry" type="text" value="{{ testcase.locked_case_data.entry or '' }}">
+
+        <label for="business_line">业务线</label>
+        <input id="business_line" name="business_line" type="text" value="{{ testcase.locked_case_data.business_line or '' }}">
+
+        <label for="scenario_type">场景类型</label>
+        <input id="scenario_type" name="scenario_type" type="text" value="{{ testcase.locked_case_data.scenario_type or '' }}">
+
+        <label for="channel">渠道</label>
+        <input id="channel" name="channel" type="text" value="{{ testcase.locked_case_data.channel or '' }}">
+
+        <label for="device_type">设备类型</label>
+        <input id="device_type" name="device_type" type="text" value="{{ testcase.locked_case_data.device_type or '' }}">
+
+        <label for="payment_method">支付方式</label>
+        <input id="payment_method" name="payment_method" type="text" value="{{ testcase.locked_case_data.payment_method or '' }}">
+
+        <label for="business_object">业务对象</label>
+        <input id="business_object" name="business_object" type="text" value="{{ testcase.locked_case_data.business_object or '' }}">
+
+        <label for="locked_preconditions">结构化前置条件</label>
+        <textarea id="locked_preconditions" name="locked_preconditions" rows="4">{{ "\n".join(testcase.locked_case_data.preconditions or []) }}</textarea>
+
+        <label for="config_conditions">配置条件</label>
+        <textarea id="config_conditions" name="config_conditions" rows="4">{{ "\n".join(testcase.locked_case_data.config_conditions or []) }}</textarea>
+
+        <label for="action">关键操作</label>
+        <textarea id="action" name="action" rows="3">{{ testcase.locked_case_data.action or "" }}</textarea>
+
+        <label for="expected_results">结构化预期结果</label>
+        <textarea id="expected_results" name="expected_results" rows="4">{{ "\n".join(testcase.locked_case_data.expected_results or []) }}</textarea>
+
+        <label for="assertions">断言点</label>
+        <textarea id="assertions" name="assertions" rows="4">{{ "\n".join(testcase.locked_case_data.assertions or []) }}</textarea>
+
+        <label for="exception_handling">异常处理</label>
+        <textarea id="exception_handling" name="exception_handling" rows="4">{{ "\n".join(testcase.locked_case_data.exception_handling or []) }}</textarea>
+
+        <label for="boundary_conditions">边界条件</label>
+        <textarea id="boundary_conditions" name="boundary_conditions" rows="4">{{ "\n".join(testcase.locked_case_data.boundary_conditions or []) }}</textarea>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">保存修改</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

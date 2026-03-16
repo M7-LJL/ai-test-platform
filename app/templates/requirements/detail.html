@@ -18,6 +18,12 @@
     {% if reanalyzed is not none %}
     <p style="margin-top: 12px; color: #1d4ed8;">已按最新规则重新完成 AI 分析。</p>
     {% endif %}
+    {% if edited is not none %}
+    <p style="margin-top: 12px; color: #166534;">测试用例修改已保存。</p>
+    {% endif %}
+    {% if llm_unavailable is not none %}
+    <p style="margin-top: 12px; color: #b45309;">已勾选使用大模型，但当前未配置 `OPENAI_API_KEY`，本次已自动回退为规则分析。</p>
+    {% endif %}
     {% if reviewed is not none %}
     <p style="margin-top: 12px; color: #166534;">人工确认已保存。</p>
     {% endif %}
@@ -303,7 +309,11 @@
                 <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
                 <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">模块</th>
                 <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">优先级</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">前置条件</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">测试步骤</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">预期结果</th>
                 <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
             </tr>
         </thead>
         <tbody>
@@ -313,7 +323,16 @@
                 <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.title }}</td>
                 <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.module or "-" }}</td>
                 <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.priority or "-" }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.status }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px; white-space: pre-wrap;">{{ testcase.preconditions or "-" }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px; white-space: pre-wrap;">{{ testcase.steps or "-" }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px; white-space: pre-wrap;">{{ testcase.expected or "-" }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    {{ testcase.status }}
+                    {% if testcase.locked %}<span class="muted"> / 已锁定</span>{% endif %}
+                </td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑</a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -322,7 +341,6 @@
     <p class="muted">当前还没有生成用例。</p>
     {% endif %}
 </div>
-{% endblock %}
 <script>
     const deletedPointIds = new Set();
     
@@ -481,10 +499,6 @@
                 title: title,
                 context: row.querySelector(".point-context").value || "需求原文",
                 requirement_source: row.querySelector(".point-requirement-source").value || title,
-                preconditions: row.querySelector(".point-preconditions-input").value.trim(),
-                steps: row.querySelector(".point-steps-input").value.trim(),
-                expected: row.querySelector(".point-expected-input").value.trim(),
-                priority: row.querySelector(".point-priority-input").value || "P2",
                 source: row.dataset.source || "manual",
                 sort_order: index,
             };
@@ -495,4 +509,5 @@
     });
     
     syncEmptyState();
-    </script>
+</script>
+{% endblock %}

@@ -10,8 +10,75 @@
     <p class="muted">创建时间：{{ project.created_at }}</p>
     <div class="page-actions">
         <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求</a>
+        <a class="btn btn-secondary" href="/projects/{{ project.id }}/report">查看测试报告</a>
         <a class="btn btn-secondary" href="/projects">返回项目列表</a>
         <a class="btn btn-secondary" href="/">返回首页</a>
     </div>
+</div>
+
+<div class="card">
+    <h2>需求列表</h2>
+    {% if requirements %}
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">创建时间</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for requirement in requirements %}
+            <tr>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.title }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.analysis_status }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.created_at }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}">查看需求</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">当前项目还没有需求。</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>用例列表</h2>
+    {% if test_cases %}
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">用例ID</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">来源需求</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for testcase in test_cases %}
+            <tr>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.case_id }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.title }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    {% if testcase.requirement_id %}
+                    <a href="/requirements/{{ testcase.requirement_id }}">{{ testcase.requirement.title if testcase.requirement else testcase.requirement_id }}</a>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑用例</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">当前项目还没有测试用例。</p>
+    {% endif %}
 </div>
 {% endblock %}

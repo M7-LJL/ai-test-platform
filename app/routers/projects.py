@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Project
@@ -66,14 +66,28 @@ def delete_project_page(project_id: int, db: Session = Depends(get_db)):
 
 @router.get("/projects/{project_id}", name="project_detail")
 def project_detail_page(project_id: int, request: Request, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = (
+        db.query(Project)
+        .options(
+            joinedload(Project.requirements),
+            joinedload(Project.test_cases),
+        )
+        .filter(Project.id == project_id)
+        .first()
+    )
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found.")
 
+    requirements = sorted(project.requirements, key=lambda item: item.created_at, reverse=True)
+    test_cases = sorted(project.test_cases, key=lambda item: item.created_at, reverse=True)
     return templates.TemplateResponse(
         request,
         "projects/detail.html",
-        {"project": project},
+        {
+            "project": project,
+            "requirements": requirements,
+            "test_cases": test_cases,
+        },
     )
 
 

@@ -6,11 +6,14 @@ import os
 import re
 from typing import Any
 
+from dotenv import load_dotenv
+
 try:
     from openai import OpenAI
 except ImportError:  # pragma: no cover
     OpenAI = None  # type: ignore[assignment]
 
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -448,7 +451,7 @@ def _normalize_analysis_payload(payload: Any, *, title: str = "") -> dict[str, A
     }
 
 
-def _can_use_llm() -> bool:
+def can_use_llm() -> bool:
     return openai_client is not None
 
 
@@ -457,7 +460,7 @@ def call_llm_for_analysis(content: str) -> dict[str, Any]:
     if not normalized:
         return _empty_analysis_payload()
 
-    if not _can_use_llm():
+    if not can_use_llm():
         raise RuntimeError("OpenAI client is not configured.")
 
     system_prompt = (
@@ -549,7 +552,7 @@ def _build_requirement_analysis_by_rules(content: str, title: str = "") -> dict[
 
 
 def build_requirement_analysis(content: str, title: str = "", use_llm: bool = False) -> dict[str, Any]:
-    if use_llm and _can_use_llm():
+    if use_llm and can_use_llm():
         try:
             llm_payload = call_llm_for_analysis(content)
             normalized_payload = _normalize_analysis_payload(llm_payload, title=title)
