@@ -7,6 +7,8 @@
     <h1>{{ requirement.title }}</h1>
     <p class="muted">所属项目：{{ requirement.project.name }}</p>
     <p class="muted">创建时间：{{ requirement.created_at }}</p>
+    <p class="muted">当前状态：{{ requirement.analysis_status or "draft" }}</p>
+
     {% if generated is not none %}
     <p style="margin-top: 12px; color: #166534;">已成功生成 {{ generated }} 条用例草稿。</p>
     {% endif %}
@@ -14,9 +16,27 @@
     <p style="margin-top: 12px; color: #166534;">已成功导入 {{ imported }} 条 Markdown 测试用例。</p>
     {% endif %}
     {% if reanalyzed is not none %}
-    <p style="margin-top: 12px; color: #1d4ed8;">已根据最新需求内容重新提取测试点。</p>
+    <p style="margin-top: 12px; color: #1d4ed8;">已按最新规则重新完成 AI 分析。</p>
     {% endif %}
+    {% if reviewed is not none %}
+    <p style="margin-top: 12px; color: #166534;">人工确认已保存。</p>
+    {% endif %}
+    {% if tool_planned is not none %}
+    <p style="margin-top: 12px; color: #166534;">测试工具与执行策略已更新。</p>
+    {% endif %}
+    {% if review_required is not none %}
+    <p style="margin-top: 12px; color: #b91c1c;">请先完成人工确认，再执行 AI 生成用例。</p>
+    {% endif %}
+
     <div class="page-actions">
+        <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <button class="btn btn-secondary" type="submit">AI重新分析</button>
+            <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: #374151;">
+                <input type="checkbox" name="use_llm" value="true" style="width: auto; margin: 0;">
+                使用大模型（需API Key）
+            </label>
+        </form>
+        
         <a class="btn" href="/requirements/{{ requirement.id }}/xmind-markdown">导出 Xmind Markdown</a>
         <a class="btn" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入 Markdown 用例</a>
         <a class="btn btn-secondary" href="/projects/{{ requirement.project.id }}">返回项目详情</a>
@@ -25,32 +45,251 @@
 </div>
 
 <div class="card">
-    <h2>需求内容</h2>
+    <h2>1. 输入需求</h2>
+    <p class="muted">支持 PRD、页面描述、流程说明等原始需求输入。</p>
     <pre style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ requirement.content }}</pre>
 </div>
 
 <div class="card">
-    <h2>AI 提取测试点</h2>
-    <p class="muted">预计按当前规则生成约 {{ estimated_case_count }} 条测试用例。</p>
-    {% if requirement.parsed_points %}
-    <ul>
-        {% for point in requirement.parsed_points %}
-        <li>{{ point }}</li>
+    <h2>2. AI需求分析</h2>
+    <p class="muted">自动发现需求漏洞、提炼关键规则、定义测试标准。</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px;">
+        {% for section in analysis_sections %}
+        <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px;">
+            <h3 style="margin-top: 0;">{{ section["title"] }}</h3>
+            {% if section["items"] %}
+            <ul>
+                {% for item in section["items"] %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="muted">暂无</p>
+            {% endif %}
+        </div>
         {% endfor %}
-    </ul>
-    <div class="page-actions">
-        <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin: 0;">
-            <button class="btn btn-secondary" type="submit">重新提取测试点</button>
+    </div>
+</div>
+
+<div class="card">
+    <h2>3. 测试理解摘要</h2>
+    <p class="muted">帮助快速形成对系统流程、风险和测试重点的统一理解。</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 16px;">
+        {% for section in summary_sections %}
+        <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px;">
+            <h3 style="margin-top: 0;">{{ section["title"] }}</h3>
+            {% if section["items"] %}
+            <ul>
+                {% for item in section["items"] %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="muted">暂无</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>4. AI辅助测试点生成</h2>
+    <p class="muted">预计按当前规则生成约 {{ estimated_case_count }} 条测试用例。</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 16px;">
+        {% for scenario in scenario_sections %}
+        <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px;">
+            <h3 style="margin-top: 0;">{{ scenario["title"] }}</h3>
+            {% if scenario["items"] %}
+            <ul>
+                {% for item in scenario["items"] %}
+                <li>{{ item.title }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="muted">暂无</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>5. 人工确认</h2>
+    <p class="muted">删掉废话，补充业务经验，选出核心回归点。</p>
+
+    <form method="post" action="/requirements/{{ requirement.id }}/review" id="review-form">
+        <input type="hidden" name="review_points_payload" id="review_points_payload" value="[]">
+        <input type="hidden" name="deleted_point_ids" id="deleted_point_ids" value="">
+
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+                <thead>
+                    <tr>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">保留</th>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">核心回归点</th>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">类型</th>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">模块</th>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">测试点</th>
+                        <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="review-points-body">
+                    {% for point in review_point_rows %}
+                    <tr
+                        class="review-point-row"
+                        data-point-id="{{ point.id or '' }}"
+                        data-deleted="0"
+                        data-source="{{ point.source or 'ai' }}"
+                    >
+                        <td style="border: 1px solid #d1d5db; padding: 10px;">
+                            <input
+                                type="checkbox"
+                                class="point-selected"
+                                {% if point.selected %}checked{% endif %}
+                                style="width: auto; margin: 0;"
+                            >
+                        </td>
+                        <td style="border: 1px solid #d1d5db; padding: 10px;">
+                            <input
+                                type="checkbox"
+                                class="point-core"
+                                {% if point.is_core %}checked{% endif %}
+                                style="width: auto; margin: 0;"
+                            >
+                        </td>
+                        <td style="border: 1px solid #d1d5db; padding: 10px;">
+                            <span class="point-category-label">
+                                {% if point.category == "functional" %}功能点{% elif point.category == "boundary" %}边界点{% else %}异常点{% endif %}
+                            </span>
+                            <input type="hidden" class="point-category" value="{{ point.category }}">
+                        </td>
+                        <td style="border: 1px solid #d1d5db; padding: 10px;">
+                            <div class="point-module-text">{{ point.module }}</div>
+                            <input
+                                type="text"
+                                class="point-module-input"
+                                value="{{ point.module }}"
+                                style="display: none; margin: 0;"
+                            >
+                        </td>
+                        <td style="border: 1px solid #d1d5db; padding: 10px;">
+                            <div class="point-title-text">{{ point.title }}</div>
+                            <textarea
+                                class="point-title-input"
+                                rows="3"
+                                style="display: none; margin: 0;"
+                            >{{ point.title }}</textarea>
+                            <input type="hidden" class="point-context" value="{{ point.context or '需求原文' }}">
+                            <input type="hidden" class="point-requirement-source" value="{{ point.requirement_source or point.title }}">
+                        </td>
+                        <td style="border: 1px solid #d1d5db; padding: 10px; white-space: nowrap;">
+                            <button type="button" class="btn btn-secondary btn-edit" onclick="togglePointEdit(this)">编辑</button>
+                            <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存</button>
+                            <button type="button" class="btn btn-secondary" onclick="deletePointRow(this)">删除</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if not review_point_rows %}
+        <p class="muted" id="review-points-empty" style="margin-top: 12px;">暂无待确认测试点，请先执行 AI 分析或手动新增。</p>
+        {% else %}
+        <p class="muted" id="review-points-empty" style="margin-top: 12px; display: none;">暂无待确认测试点，请先执行 AI 分析或手动新增。</p>
+        {% endif %}
+
+        <div style="margin-top: 20px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px;">
+            <h3 style="margin-top: 0;">新增测试点</h3>
+
+            <label for="new_point_category">类型</label>
+            <select id="new_point_category">
+                <option value="functional">功能点</option>
+                <option value="boundary">边界点</option>
+                <option value="exception">异常点</option>
+            </select>
+
+            <label for="new_point_module">模块</label>
+            <input type="text" id="new_point_module" placeholder="例如：支付回流链路">
+
+            <label for="new_point_title">测试点描述</label>
+            <textarea id="new_point_title" rows="4" placeholder="请输入测试点描述"></textarea>
+
+            <div class="page-actions" style="margin-top: 12px;">
+                <button type="button" class="btn btn-secondary" onclick="addReviewPointRow()">添加</button>
+            </div>
+        </div>
+
+        <label for="custom_points" style="margin-top: 20px;">补充业务经验</label>
+        <textarea id="custom_points" name="custom_points" rows="6" placeholder="每行一条">{{ "\n".join(custom_points) }}</textarea>
+
+        <label for="review_notes">人工确认说明</label>
+        <textarea id="review_notes" name="review_notes" rows="4" placeholder="记录删掉废话、补充经验和确认口径。">{{ requirement.review_notes or "" }}</textarea>
+
+        {% if core_regression_points %}
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;">
+            <strong>已选核心回归点</strong>
+            <ul style="margin-bottom: 0;">
+                {% for item in core_regression_points %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="page-actions">
+            <button class="btn" type="submit">保存人工确认</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>测试工具规划</h2>
+    <p class="muted">基于核心回归点和风险，生成推荐工具与执行策略。</p>
+
+    <div class="page-actions" style="margin-top: 0;">
+        <form method="post" action="/requirements/{{ requirement.id }}/tool-plan" style="margin: 0;">
+            <button class="btn btn-secondary" type="submit">生成工具规划</button>
         </form>
         <form method="post" action="/testcases/generate-from-requirement/{{ requirement.id }}" style="margin: 0;">
-            <button class="btn" type="submit">AI 生成用例</button>
+            <button
+                class="btn"
+                type="submit"
+                {% if requirement.analysis_status not in ["reviewed", "ready_for_execution"] %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}
+            >
+                AI 生成用例
+            </button>
         </form>
     </div>
+
+    {% if tool_plan %}
+    <div style="overflow-x: auto; margin-top: 16px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">工具/方式</th>
+                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">覆盖范围</th>
+                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">关注目标</th>
+                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">原因</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in tool_plan %}
+                <tr>
+                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.tool }}</td>
+                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.scope }}</td>
+                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.target }}</td>
+                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.reason }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <p class="muted">暂无</p>
-    <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin-top: 16px;">
-        <button class="btn btn-secondary" type="submit">重新提取测试点</button>
-    </form>
+    <p class="muted">暂无工具规划。</p>
     {% endif %}
 </div>
 
@@ -84,3 +323,176 @@
     {% endif %}
 </div>
 {% endblock %}
+<script>
+    const deletedPointIds = new Set();
+    
+    function escapeHtml(text) {
+        return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+    
+    function categoryLabel(category) {
+        if (category === "boundary") return "边界点";
+        if (category === "exception") return "异常点";
+        return "功能点";
+    }
+    
+    function syncEmptyState() {
+        const rows = Array.from(document.querySelectorAll("#review-points-body .review-point-row"))
+            .filter((row) => row.dataset.deleted !== "1");
+        const empty = document.getElementById("review-points-empty");
+        if (empty) {
+            empty.style.display = rows.length ? "none" : "block";
+        }
+    }
+    
+    function togglePointEdit(button) {
+        const row = button.closest(".review-point-row");
+        row.querySelector(".point-title-text").style.display = "none";
+        row.querySelector(".point-title-input").style.display = "block";
+        row.querySelector(".point-module-text").style.display = "none";
+        row.querySelector(".point-module-input").style.display = "block";
+        row.querySelector(".btn-edit").style.display = "none";
+        row.querySelector(".btn-save").style.display = "inline-block";
+    }
+    
+    function savePointEdit(button) {
+        const row = button.closest(".review-point-row");
+        const titleInput = row.querySelector(".point-title-input");
+        const moduleInput = row.querySelector(".point-module-input");
+        const titleText = row.querySelector(".point-title-text");
+        const moduleText = row.querySelector(".point-module-text");
+        const requirementSource = row.querySelector(".point-requirement-source");
+    
+        const nextTitle = titleInput.value.trim();
+        const nextModule = moduleInput.value.trim();
+    
+        if (!nextTitle) {
+            titleInput.focus();
+            return;
+        }
+    
+        titleText.textContent = nextTitle;
+        moduleText.textContent = nextModule;
+    
+        if ((row.dataset.source || "manual") === "manual") {
+            requirementSource.value = nextTitle;
+        }
+    
+        titleText.style.display = "block";
+        titleInput.style.display = "none";
+        moduleText.style.display = "block";
+        moduleInput.style.display = "none";
+        row.querySelector(".btn-edit").style.display = "inline-block";
+        row.querySelector(".btn-save").style.display = "none";
+    }
+    
+    function deletePointRow(button) {
+        const row = button.closest(".review-point-row");
+        const pointId = row.dataset.pointId;
+        if (pointId) {
+            deletedPointIds.add(pointId);
+        }
+        row.dataset.deleted = "1";
+        row.style.display = "none";
+        syncEmptyState();
+    }
+    
+    function addReviewPointRow() {
+        const category = document.getElementById("new_point_category").value;
+        const module = document.getElementById("new_point_module").value.trim();
+        const title = document.getElementById("new_point_title").value.trim();
+    
+        if (!title) {
+            document.getElementById("new_point_title").focus();
+            return;
+        }
+    
+        const tbody = document.getElementById("review-points-body");
+        const row = document.createElement("tr");
+        row.className = "review-point-row";
+        row.dataset.pointId = "";
+        row.dataset.deleted = "0";
+        row.dataset.source = "manual";
+    
+        row.innerHTML = `
+            <td style="border: 1px solid #d1d5db; padding: 10px;">
+                <input type="checkbox" class="point-selected" style="width: auto; margin: 0;">
+            </td>
+            <td style="border: 1px solid #d1d5db; padding: 10px;">
+                <input type="checkbox" class="point-core" style="width: auto; margin: 0;">
+            </td>
+            <td style="border: 1px solid #d1d5db; padding: 10px;">
+                <span class="point-category-label">${escapeHtml(categoryLabel(category))}</span>
+                <input type="hidden" class="point-category" value="${escapeHtml(category)}">
+            </td>
+            <td style="border: 1px solid #d1d5db; padding: 10px;">
+                <div class="point-module-text">${escapeHtml(module)}</div>
+                <input type="text" class="point-module-input" value="${escapeHtml(module)}" style="display: none; margin: 0;">
+            </td>
+            <td style="border: 1px solid #d1d5db; padding: 10px;">
+                <div class="point-title-text">${escapeHtml(title)}</div>
+                <textarea class="point-title-input" rows="3" style="display: none; margin: 0;">${escapeHtml(title)}</textarea>
+                <input type="hidden" class="point-context" value="人工新增">
+                <input type="hidden" class="point-requirement-source" value="${escapeHtml(title)}">
+            </td>
+            <td style="border: 1px solid #d1d5db; padding: 10px; white-space: nowrap;">
+                <button type="button" class="btn btn-secondary btn-edit" onclick="togglePointEdit(this)">编辑</button>
+                <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存</button>
+                <button type="button" class="btn btn-secondary" onclick="deletePointRow(this)">删除</button>
+            </td>
+        `;
+    
+        tbody.appendChild(row);
+    
+        document.getElementById("new_point_module").value = "";
+        document.getElementById("new_point_title").value = "";
+        syncEmptyState();
+    }
+    
+    document.getElementById("review-form").addEventListener("submit", function () {
+        const rows = Array.from(document.querySelectorAll("#review-points-body .review-point-row"))
+            .filter((row) => row.dataset.deleted !== "1");
+    
+        const payload = rows.map((row, index) => {
+            const titleInput = row.querySelector(".point-title-input");
+            const moduleInput = row.querySelector(".point-module-input");
+            const titleText = row.querySelector(".point-title-text");
+            const moduleText = row.querySelector(".point-module-text");
+    
+            const title = titleInput.style.display !== "none"
+                ? titleInput.value.trim()
+                : titleText.textContent.trim();
+    
+            const module = moduleInput.style.display !== "none"
+                ? moduleInput.value.trim()
+                : moduleText.textContent.trim();
+    
+            return {
+                id: row.dataset.pointId || "",
+                selected: row.querySelector(".point-selected").checked,
+                is_core: row.querySelector(".point-core").checked,
+                category: row.querySelector(".point-category").value,
+                module: module,
+                title: title,
+                context: row.querySelector(".point-context").value || "需求原文",
+                requirement_source: row.querySelector(".point-requirement-source").value || title,
+                preconditions: row.querySelector(".point-preconditions-input").value.trim(),
+                steps: row.querySelector(".point-steps-input").value.trim(),
+                expected: row.querySelector(".point-expected-input").value.trim(),
+                priority: row.querySelector(".point-priority-input").value || "P2",
+                source: row.dataset.source || "manual",
+                sort_order: index,
+            };
+        }).filter((item) => item.title);
+    
+        document.getElementById("review_points_payload").value = JSON.stringify(payload);
+        document.getElementById("deleted_point_ids").value = Array.from(deletedPointIds).join(",");
+    });
+    
+    syncEmptyState();
+    </script>
