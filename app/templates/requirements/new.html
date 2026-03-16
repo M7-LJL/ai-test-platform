@@ -5,7 +5,8 @@
 {% block content %}
 <div class="card">
     <h1>新建需求</h1>
-    <p class="muted">选择所属项目并填写需求信息，系统会自动提取测试点。</p>
+    <p class="muted">上传 Markdown 需求文档，或直接粘贴正文，系统会自动提取标题并进入 AI 工作台。</p>
+
     <div class="page-actions">
         <a class="btn btn-secondary" href="/projects">返回项目列表</a>
         {% if selected_project_id %}
@@ -13,24 +14,92 @@
         {% endif %}
     </div>
 
-    <form method="post" action="/requirements/">
+    {% if error_message %}
+    <div style="margin: 16px 0; padding: 12px 14px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 10px;">
+        {{ error_message }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/requirements/" enctype="multipart/form-data" id="requirement-form">
         <label for="project_id">选择项目</label>
         <select id="project_id" name="project_id" required>
             <option value="">请选择项目</option>
             {% for project in projects %}
-            <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+            <option
+                value="{{ project.id }}"
+                {% if selected_project_id == project.id or form_data.get('project_id') == (project.id | string) %}selected{% endif %}
+            >
                 {{ project.name }}
             </option>
             {% endfor %}
         </select>
 
-        <label for="title">需求标题</label>
-        <input id="title" name="title" type="text" placeholder="请输入需求标题" required>
+        <label for="markdown_file">上传 Markdown 文件</label>
+        <input id="markdown_file" name="markdown_file" type="file" accept=".md,.markdown,text/markdown">
+        <div id="selected-file-name" class="muted" style="margin-top: 8px;">
+            {% if form_data.get('markdown_filename_text') %}
+            已选择文件：{{ form_data.get('markdown_filename_text') }}
+            {% else %}
+            未选择文件
+            {% endif %}
+        </div>
+        <div id="selected-file-meta" class="muted" style="margin-top: 4px;"></div>
 
-        <label for="content">需求内容</label>
-        <textarea id="content" name="content" rows="10" placeholder="请输入需求内容" required></textarea>
+        <input type="hidden" id="markdown_filename_text" name="markdown_filename_text" value="{{ form_data.get('markdown_filename_text', '') }}">
+        <input type="hidden" id="markdown_content_text" name="markdown_content_text" value="{{ form_data.get('markdown_content_text', '') }}">
 
-        <button class="btn" type="submit">保存需求</button>
+        <label for="fallback_content" style="margin-top: 20px;">兜底正文输入</label>
+        <textarea
+            id="fallback_content"
+            name="fallback_content"
+            rows="12"
+            placeholder="如果本地 Markdown 文件有问题，可以直接把需求正文粘贴到这里。"
+        >{{ form_data.get('fallback_content', '') }}</textarea>
+
+        <div id="selected-input-source" class="muted" style="margin-top: 8px;">
+            系统优先使用上传文件内容；如果文件为空，则自动使用你粘贴的正文。
+        </div>
+
+        <div class="page-actions" style="margin-top: 20px;">
+            <button class="btn" type="submit">保存并进入AI工作台</button>
+        </div>
     </form>
 </div>
+
+<script>
+(() => {
+    const fileInput = document.getElementById("markdown_file");
+    const fileNameHint = document.getElementById("selected-file-name");
+    const fileMetaHint = document.getElementById("selected-file-meta");
+    const hiddenName = document.getElementById("markdown_filename_text");
+    const hiddenContent = document.getElementById("markdown_content_text");
+
+    if (!fileInput) {
+        return;
+    }
+
+    fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            fileNameHint.textContent = "未选择文件";
+            fileMetaHint.textContent = "";
+            hiddenName.value = "";
+            hiddenContent.value = "";
+            return;
+        }
+
+        fileNameHint.textContent = `已选择文件：${file.name}`;
+        fileMetaHint.textContent = `文件大小：${Math.ceil(file.size / 1024)} KB`;
+        hiddenName.value = file.name;
+
+        try {
+            const text = await file.text();
+            hiddenContent.value = text || "";
+        } catch (error) {
+            hiddenContent.value = "";
+            fileMetaHint.textContent = "文件读取失败，可直接粘贴正文继续。";
+        }
+    });
+})();
+</script>
 {% endblock %}

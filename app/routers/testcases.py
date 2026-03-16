@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -10,44 +12,38 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Requirement, TestCase
-from app.services.xmind_markdown_service import CASE_TYPE_PRIORITY, generate_structured_cases, parse_xmind_markdown
-
+from app.services.xmind_markdown_service import (
+    CASE_TYPE_PRIORITY,
+    generate_structured_cases,
+    parse_xmind_markdown,
+    render_case_from_locked_data,
+)
 
 router = APIRouter(tags=["testcases-html"])
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def _extract_point_title(point: object) -> str:
-    if isinstance(point, str):
-        return point.strip()
-    if isinstance(point, dict):
-        for key in ("title", "name", "point", "content"):
-            value = point.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-    return str(point).strip()
+def _utcnow() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _build_case_steps(point_title: str) -> str:
-    return "\n".join(
-        [
-            "1. 准备测试环境并打开目标页面。",
-            f"2. 执行与“{point_title}”相关的操作步骤。",
-            "3. 记录系统返回结果并核对提示信息。",
-        ]
+def _append_requirement_tool_result(
+    requirement: Requirement,
+    tool_name: str,
+    summary: str,
+    status: str = "completed",
+) -> None:
+    history: list[dict[str, Any]] = list(requirement.tool_result or [])
+    history.append(
+        {
+            "tool": tool_name,
+            "summary": summary,
+            "status": status,
+            "created_at": _utcnow(),
+        }
     )
-
-
-def _build_case_expected(point_title: str) -> str:
-    return f"系统应正确满足“{point_title}”对应的业务预期，并展示正确结果。"
-
-
-def _infer_priority(point_title: str) -> str:
-    high_priority_keywords = ("登录", "支付", "下单", "注册", "权限", "安全")
-    if any(keyword in point_title for keyword in high_priority_keywords):
-        return "P1"
-    return "P2"
+    requirement.tool_result = history[-8:]
 
 
 def _ensure_unique_case_id(db: Session, desired_case_id: str) -> str:
@@ -59,6 +55,266 @@ def _ensure_unique_case_id(db: Session, desired_case_id: str) -> str:
     if exists is None:
         return candidate
     return f"TC-{uuid4().hex[:8].upper()}"
+
+
+def _source_version(requirement: Requirement) -> str:
+    if requirement.reviewed_at is not None:
+        return f"reviewed-{requirement.reviewed_at.strftime('%Y%m%d%H%M%S')}"
+    if requirement.last_analyzed_at is not None:
+        return f"analyzed-{requirement.last_analyzed_at.strftime('%Y%m%d%H%M%S')}"
+    return f"generated-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+
+def _normalized_title(value: str) -> str:
+    return " ".join((value or "").split()).strip().lower()
+
+
+def _clean_text(value: str) -> str:
+    return " ".join((value or "").replace("\u3000", " ").split()).strip()
+
+
+def _split_multiline_lines(value: str) -> list[str]:
+    lines: list[str] = []
+    for raw in (value or "").splitlines():
+        cleaned = raw.strip().lstrip("-").lstrip("•").strip()
+        if cleaned:
+            lines.append(cleaned)
+    return lines
+
+
+def _storage_case_type_to_render_case_type(case_type: str) -> str:
+    normalized = _clean_text(case_type)
+    if normalized in {"正向", "正常", "正常流程"}:
+        return "正常流程"
+    if normalized in {"边界", "边界条件"}:
+        return "边界条件"
+    if normalized in {"异常", "异常场景"}:
+        return "异常场景"
+    return "正常流程"
+
+
+def _normalize_locked_case_data(data: dict[str, Any] | None) -> dict[str, Any]:
+    raw = dict(data or {})
+    return {
+        "scene_name": _clean_text(str(raw.get("scene_name", ""))),
+        "user_type": _clean_text(str(raw.get("user_type", ""))),
+        "entry": _clean_text(str(raw.get("entry", ""))),
+        "business_line": _clean_text(str(raw.get("business_line", ""))),
+        "scenario_type": _clean_text(str(raw.get("scenario_type", ""))),
+        "channel": _clean_text(str(raw.get("channel", ""))),
+        "device_type": _clean_text(str(raw.get("device_type", ""))),
+        "payment_method": _clean_text(str(raw.get("payment_method", ""))),
+        "business_object": _clean_text(str(raw.get("business_object", ""))),
+        "preconditions": [item for item in raw.get("preconditions", []) if _clean_text(str(item))],
+        "config_conditions": [item for item in raw.get("config_conditions", []) if _clean_text(str(item))],
+        "action": _clean_text(str(raw.get("action", ""))),
+        "expected_results": [item for item in raw.get("expected_results", []) if _clean_text(str(item))],
+        "assertions": [item for item in raw.get("assertions", []) if _clean_text(str(item))],
+        "exception_handling": [item for item in raw.get("exception_handling", []) if _clean_text(str(item))],
+        "boundary_conditions": [item for item in raw.get("boundary_conditions", []) if _clean_text(str(item))],
+    }
+
+
+def _fallback_locked_case_data(case: dict[str, Any]) -> dict[str, Any]:
+    return _normalize_locked_case_data(
+        {
+            "scene_name": _clean_text(str(case.get("title", ""))),
+            "user_type": "",
+            "entry": "",
+            "business_line": "",
+            "scenario_type": "",
+            "channel": "",
+            "device_type": "",
+            "payment_method": "",
+            "business_object": "",
+            "preconditions": _split_multiline_lines(str(case.get("preconditions", ""))),
+            "config_conditions": [],
+            "action": _clean_text(str(case.get("title", ""))),
+            "expected_results": _split_multiline_lines(str(case.get("expected", ""))),
+            "assertions": [],
+            "exception_handling": [],
+            "boundary_conditions": [],
+        }
+    )
+
+
+def _extract_locked_case_form_payload(
+    *,
+    scene_name: str,
+    user_type: str,
+    entry: str,
+    business_line: str,
+    scenario_type: str,
+    channel: str,
+    device_type: str,
+    payment_method: str,
+    business_object: str,
+    locked_preconditions: str,
+    config_conditions: str,
+    action: str,
+    expected_results: str,
+    assertions: str,
+    exception_handling: str,
+    boundary_conditions: str,
+) -> dict[str, Any]:
+    return _normalize_locked_case_data(
+        {
+            "scene_name": scene_name,
+            "user_type": user_type,
+            "entry": entry,
+            "business_line": business_line,
+            "scenario_type": scenario_type,
+            "channel": channel,
+            "device_type": device_type,
+            "payment_method": payment_method,
+            "business_object": business_object,
+            "preconditions": _split_multiline_lines(locked_preconditions),
+            "config_conditions": _split_multiline_lines(config_conditions),
+            "action": action,
+            "expected_results": _split_multiline_lines(expected_results),
+            "assertions": _split_multiline_lines(assertions),
+            "exception_handling": _split_multiline_lines(exception_handling),
+            "boundary_conditions": _split_multiline_lines(boundary_conditions),
+        }
+    )
+
+
+def _has_structured_form_input(payload: dict[str, Any]) -> bool:
+    scalar_fields = (
+        "scene_name",
+        "user_type",
+        "entry",
+        "business_line",
+        "scenario_type",
+        "channel",
+        "device_type",
+        "payment_method",
+        "business_object",
+        "action",
+    )
+    list_fields = (
+        "preconditions",
+        "config_conditions",
+        "expected_results",
+        "assertions",
+        "exception_handling",
+        "boundary_conditions",
+    )
+
+    if any(_clean_text(str(payload.get(field, ""))) for field in scalar_fields):
+        return True
+    if any(payload.get(field) for field in list_fields):
+        return True
+    return False
+
+
+def _build_testcase_model(
+    db: Session,
+    requirement: Requirement,
+    case: dict[str, Any],
+    *,
+    source: str,
+    source_version: str,
+) -> TestCase:
+    locked_case_data = _normalize_locked_case_data(case.get("locked_case_data") or _fallback_locked_case_data(case))
+    return TestCase(
+        project_id=requirement.project_id,
+        requirement_id=requirement.id,
+        case_id=_ensure_unique_case_id(db, case.get("case_id", "")),
+        title=case["title"],
+        module=case.get("module") or requirement.title,
+        priority=case.get("priority") or CASE_TYPE_PRIORITY.get(case.get("case_type", ""), "P2"),
+        case_type=case.get("test_kind") or case.get("case_type") or "正向",
+        test_data=case.get("test_data") or "",
+        requirement_source=case.get("requirement_source") or "需求原文",
+        preconditions=case.get("preconditions") or "",
+        steps=case.get("steps") or "",
+        expected=case.get("expected") or "",
+        status=case.get("status") or "draft",
+        source=source,
+        review_status="reviewed",
+        manually_edited=False,
+        locked=False,
+        source_version=source_version,
+        updated_at=datetime.utcnow(),
+        locked_case_data=locked_case_data,
+    )
+
+
+def _generation_impact(existing_cases: list[TestCase]) -> dict[str, int]:
+    locked_count = sum(1 for case in existing_cases if case.locked)
+    edited_count = sum(1 for case in existing_cases if case.manually_edited)
+    protected_count = sum(1 for case in existing_cases if case.locked or case.manually_edited)
+    return {
+        "total": len(existing_cases),
+        "locked": locked_count,
+        "edited": edited_count,
+        "replaceable": len(existing_cases) - protected_count,
+        "protected": protected_count,
+    }
+
+
+def _sync_requirement_cases(
+    db: Session,
+    requirement: Requirement,
+    structured_cases: list[dict[str, Any]],
+    *,
+    source: str,
+    mode: str,
+) -> dict[str, int]:
+    existing_cases = (
+        db.query(TestCase)
+        .filter(TestCase.requirement_id == requirement.id)
+        .order_by(TestCase.created_at.asc())
+        .all()
+    )
+    source_version = _source_version(requirement)
+    protected_titles = {
+        _normalized_title(case.title)
+        for case in existing_cases
+        if case.locked or case.manually_edited
+    }
+    all_existing_titles = {_normalized_title(case.title) for case in existing_cases}
+    deleted_count = 0
+
+    if mode == "overwrite":
+        for testcase in existing_cases:
+            if testcase.locked or testcase.manually_edited:
+                continue
+            db.delete(testcase)
+            deleted_count += 1
+        blocked_titles = set(protected_titles)
+    else:
+        blocked_titles = set(all_existing_titles)
+
+    created_count = 0
+    skipped_count = 0
+    staged_titles = set(blocked_titles)
+    for case in structured_cases:
+        normalized_title = _normalized_title(case.get("title", ""))
+        if not normalized_title or normalized_title in staged_titles:
+            skipped_count += 1
+            continue
+        staged_titles.add(normalized_title)
+        testcase = _build_testcase_model(
+            db,
+            requirement,
+            case,
+            source=source,
+            source_version=source_version,
+        )
+        db.add(testcase)
+        created_count += 1
+
+    impact = _generation_impact(existing_cases)
+    impact.update(
+        {
+            "created": created_count,
+            "deleted": deleted_count,
+            "skipped": skipped_count,
+        }
+    )
+    return impact
 
 
 @router.get("/testcases/import-markdown", name="import_testcases_markdown")
@@ -77,6 +333,7 @@ def import_testcases_markdown_page(
         request,
         "testcases/import_markdown.html",
         {
+            "request": request,
             "requirements": requirements,
             "selected_requirement_id": requirement_id,
         },
@@ -100,63 +357,211 @@ async def import_testcases_markdown_submit(
     if not parsed_cases:
         raise HTTPException(status_code=400, detail="No test cases could be parsed from markdown.")
 
-    if replace_existing:
-        db.query(TestCase).filter(TestCase.requirement_id == requirement.id).delete()
-
-    imported_count = 0
+    normalized_cases: list[dict[str, Any]] = []
     for case in parsed_cases:
-        testcase = TestCase(
-            project_id=requirement.project_id,
-            requirement_id=requirement.id,
-            case_id=_ensure_unique_case_id(db, case.get("case_id", "")),
-            title=case["title"],
-            module=case.get("module") or requirement.title,
-            priority=case.get("priority") or CASE_TYPE_PRIORITY.get(case.get("case_type", ""), "P2"),
-            preconditions=case.get("preconditions") or "",
-            steps=case.get("steps") or "",
-            expected=case.get("expected") or "",
-            status=case.get("status") or "draft",
+        payload = dict(case)
+        payload["locked_case_data"] = _normalize_locked_case_data(
+            payload.get("locked_case_data") or _fallback_locked_case_data(payload)
         )
-        db.add(testcase)
-        imported_count += 1
+        normalized_cases.append(payload)
 
+    impact = _sync_requirement_cases(
+        db,
+        requirement,
+        normalized_cases,
+        source="markdown_imported",
+        mode="overwrite" if replace_existing else "append",
+    )
+
+    requirement.analysis_status = "ready_for_execution"
+    _append_requirement_tool_result(
+        requirement,
+        "Markdown 导入",
+        f"已导入 {impact['created']} 条 Markdown 用例，跳过 {impact['skipped']} 条重复/受保护用例。",
+    )
     db.commit()
     return RedirectResponse(
-        url=f"/requirements/{requirement.id}?imported={imported_count}",
+        url=f"/requirements/{requirement.id}?imported={impact['created']}",
         status_code=303,
     )
 
 
+@router.get("/testcases/{testcase_id}/edit", name="edit_testcase")
+def edit_testcase_page(testcase_id: int, request: Request, db: Session = Depends(get_db)):
+    testcase = (
+        db.query(TestCase)
+        .options(joinedload(TestCase.requirement), joinedload(TestCase.project))
+        .filter(TestCase.id == testcase_id)
+        .first()
+    )
+    if testcase is None:
+        raise HTTPException(status_code=404, detail="Test case not found.")
+
+    testcase.locked_case_data = _normalize_locked_case_data(
+        testcase.locked_case_data
+        or _fallback_locked_case_data(
+            {
+                "title": testcase.title,
+                "preconditions": testcase.preconditions,
+                "expected": testcase.expected,
+            }
+        )
+    )
+    return templates.TemplateResponse(request, "testcases/edit.html", {"request": request, "testcase": testcase})
+
+
+@router.post("/testcases/{testcase_id}/edit", name="submit_edit_testcase")
+def submit_edit_testcase(
+    testcase_id: int,
+    title: str = Form(default=""),
+    module: str = Form(default=""),
+    priority: str = Form(default="P2"),
+    case_type: str = Form(default="正向"),
+    preconditions: str = Form(default=""),
+    steps: str = Form(default=""),
+    expected: str = Form(default=""),
+    test_data: str = Form(default=""),
+    requirement_source: str = Form(default=""),
+    status: str = Form(default="draft"),
+    locked: str | None = Form(default=None),
+    scene_name: str = Form(default=""),
+    user_type: str = Form(default=""),
+    entry: str = Form(default=""),
+    business_line: str = Form(default=""),
+    scenario_type: str = Form(default=""),
+    channel: str = Form(default=""),
+    device_type: str = Form(default=""),
+    payment_method: str = Form(default=""),
+    business_object: str = Form(default=""),
+    locked_preconditions: str = Form(default=""),
+    config_conditions: str = Form(default=""),
+    action: str = Form(default=""),
+    expected_results: str = Form(default=""),
+    assertions: str = Form(default=""),
+    exception_handling: str = Form(default=""),
+    boundary_conditions: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    testcase = db.query(TestCase).filter(TestCase.id == testcase_id).first()
+    if testcase is None:
+        raise HTTPException(status_code=404, detail="Test case not found.")
+
+    requirement = None
+    if testcase.requirement_id is not None:
+        requirement = db.query(Requirement).filter(Requirement.id == testcase.requirement_id).first()
+
+    structured_payload = _extract_locked_case_form_payload(
+        scene_name=scene_name or title,
+        user_type=user_type,
+        entry=entry,
+        business_line=business_line,
+        scenario_type=scenario_type,
+        channel=channel,
+        device_type=device_type,
+        payment_method=payment_method,
+        business_object=business_object,
+        locked_preconditions=locked_preconditions,
+        config_conditions=config_conditions,
+        action=action or title,
+        expected_results=expected_results,
+        assertions=assertions,
+        exception_handling=exception_handling,
+        boundary_conditions=boundary_conditions,
+    )
+
+    if _has_structured_form_input(structured_payload):
+        rendered = render_case_from_locked_data(
+            structured_payload,
+            module=_clean_text(module) or _clean_text(testcase.module or "") or _clean_text(requirement.title if requirement else ""),
+            section="",
+            case_type=_storage_case_type_to_render_case_type(case_type),
+            priority=_clean_text(priority) or "P2",
+            requirement_source=_clean_text(requirement_source) or "人工编辑",
+        )
+        testcase.title = rendered["title"]
+        testcase.module = rendered["module"]
+        testcase.priority = rendered["priority"]
+        testcase.case_type = rendered.get("test_kind") or case_type.strip() or "正向"
+        testcase.preconditions = rendered["preconditions"]
+        testcase.steps = rendered["steps"]
+        testcase.expected = rendered["expected"]
+        testcase.test_data = rendered.get("test_data") or test_data.strip()
+        testcase.requirement_source = rendered.get("requirement_source") or "人工编辑"
+        testcase.locked_case_data = _normalize_locked_case_data(rendered.get("locked_case_data"))
+    else:
+        testcase.title = title.strip() or testcase.title
+        testcase.module = module.strip() or testcase.module
+        testcase.priority = priority.strip() or "P2"
+        testcase.case_type = case_type.strip() or "正向"
+        testcase.preconditions = preconditions.strip()
+        testcase.steps = steps.strip()
+        testcase.expected = expected.strip()
+        testcase.test_data = test_data.strip()
+        testcase.requirement_source = requirement_source.strip() or "人工编辑"
+        testcase.locked_case_data = _normalize_locked_case_data(
+            testcase.locked_case_data
+            or _fallback_locked_case_data(
+                {
+                    "title": testcase.title,
+                    "preconditions": testcase.preconditions,
+                    "expected": testcase.expected,
+                }
+            )
+        )
+
+    testcase.status = status.strip() or "draft"
+    testcase.locked = locked is not None
+    testcase.manually_edited = True
+    testcase.source = "manual_edit"
+    testcase.review_status = "reviewed"
+    testcase.updated_at = datetime.utcnow()
+    db.commit()
+
+    redirect_requirement_id = testcase.requirement_id
+    if redirect_requirement_id is not None:
+        return RedirectResponse(url=f"/requirements/{redirect_requirement_id}?edited=1", status_code=303)
+    return RedirectResponse(url="/projects", status_code=303)
+
+
 @router.post("/testcases/generate-from-requirement/{requirement_id}", name="generate_testcases")
-def generate_testcases_from_requirement(requirement_id: int, db: Session = Depends(get_db)):
+def generate_testcases_from_requirement(
+    requirement_id: int,
+    generate_mode: str = Form(default="overwrite"),
+    db: Session = Depends(get_db),
+):
     requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
     if requirement is None:
         raise HTTPException(status_code=404, detail="Requirement not found.")
 
-    structured_cases = generate_structured_cases(requirement.title, requirement.content)
-    db.query(TestCase).filter(TestCase.requirement_id == requirement.id).delete()
-    created_testcases: list[TestCase] = []
-
-    for case in structured_cases:
-        testcase = TestCase(
-            project_id=requirement.project_id,
-            requirement_id=requirement.id,
-            case_id=f"TC-{uuid4().hex[:8].upper()}",
-            title=case["title"],
-            module=case["module"],
-            priority=case["priority"],
-            preconditions=case["preconditions"],
-            steps=case["steps"],
-            expected=case["expected"],
-            status=case["status"],
+    if requirement.analysis_status not in {"reviewed", "ready_for_execution"}:
+        return RedirectResponse(
+            url=f"/requirements/{requirement_id}?review_required=1",
+            status_code=303,
         )
-        db.add(testcase)
-        created_testcases.append(testcase)
 
+    structured_cases = generate_structured_cases(
+        requirement.title,
+        requirement.content,
+        analysis_payload=requirement.analysis_payload,
+    )
+    normalized_mode = generate_mode if generate_mode in {"overwrite", "append"} else "overwrite"
+    impact = _sync_requirement_cases(
+        db,
+        requirement,
+        structured_cases,
+        source="ai_generated",
+        mode=normalized_mode,
+    )
+
+    requirement.analysis_status = "ready_for_execution"
+    _append_requirement_tool_result(
+        requirement,
+        "AI 生成用例",
+        f"已按{'覆盖生成' if normalized_mode == 'overwrite' else '仅补充新增'}生成 {impact['created']} 条测试用例，保留 {impact['protected']} 条受保护用例。",
+    )
     db.commit()
 
-    generated_count = len(created_testcases)
     return RedirectResponse(
-        url=f"/requirements/{requirement_id}?generated={generated_count}",
+        url=f"/requirements/{requirement_id}?generated={impact['created']}",
         status_code=303,
     )

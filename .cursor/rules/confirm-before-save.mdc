@@ -1,0 +1,11 @@
+---
+description: Require confirmation before saving generated code
+alwaysApply: true
+---
+
+# Confirm Before Save
+
+- Do not automatically write generated code into project files.
+- By default, provide code in chat first and wait for explicit user confirmation.
+- Only save file changes after the user clearly confirms with "keep", "apply", or equivalent approval.
+- If the user asks for code changes without approval to save, show the proposed patch or code snippet instead of editing files.
