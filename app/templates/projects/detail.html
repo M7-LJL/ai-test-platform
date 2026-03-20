@@ -9,7 +9,7 @@
     <p class="muted">项目 ID：{{ project.id }}</p>
     <p class="muted">创建时间：{{ project.created_at }}</p>
     <div class="page-actions">
-        <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求</a>
+        <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求（自动进入工作流）</a>
         <a class="btn btn-secondary" href="/projects/{{ project.id }}/report">查看测试报告</a>
         <a class="btn btn-secondary" href="/projects">返回项目列表</a>
         <a class="btn btn-secondary" href="/">返回首页</a>
@@ -43,6 +43,51 @@
     </table>
     {% else %}
     <p class="muted">当前项目还没有需求。</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>测试工作流</h2>
+    {% if workflows %}
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">工作流名称</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">关联需求</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">当前阶段</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">创建时间</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for wf in workflows %}
+            <tr>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ wf.name }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    {% if wf.requirement_id %}
+                    <a href="/requirements/{{ wf.requirement_id }}">{{ wf.requirement.title if wf.requirement else wf.requirement_id }}</a>
+                    {% else %}-{% endif %}
+                </td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    {% set stage_map = {'outline': '测试大纲', 'analysis': '需求分析', 'cases': '用例编写', 'defects': '缺陷报告', 'report': '测试报告'} %}
+                    {{ stage_map.get(wf.current_stage, wf.current_stage) }}
+                </td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    {% if wf.status == 'completed' %}<span style="color: #065f46;">已完成</span>
+                    {% elif wf.status == 'in_progress' %}<span style="color: #b45309;">进行中</span>
+                    {% else %}<span style="color: #6b7280;">草稿</span>{% endif %}
+                </td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ wf.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px;">
+                    <a class="btn btn-secondary" href="/workflow/{{ wf.id }}">进入工作流</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">当前项目还没有测试工作流。新建需求后会自动创建。</p>
     {% endif %}
 </div>
 

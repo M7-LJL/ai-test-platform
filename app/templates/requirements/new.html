@@ -5,7 +5,17 @@
 {% block content %}
 <div class="card">
     <h1>新建需求</h1>
-    <p class="muted">上传 Markdown 需求文档，或直接粘贴正文，系统会自动提取标题并进入 AI 工作台。</p>
+    <p class="muted">上传 Markdown 需求文档或直接粘贴正文，系统会自动创建需求分析并进入 <strong>AI 测试工作流</strong>。</p>
+    <div class="info-panel" style="margin-top: 16px;">
+        <h3>提交后将自动进入测试工作流</h3>
+        <ul class="dense-list">
+            <li><strong>测试大纲</strong>：AI 根据需求内容生成测试大纲。</li>
+            <li><strong>需求分析</strong>：按角色、页面、动作、数据、流程、规则等维度深入分析。</li>
+            <li><strong>用例编写</strong>：生成包含正常、边界、异常和真实用户场景的测试用例。</li>
+            <li><strong>缺陷报告</strong>：支持粘贴执行结果，AI 生成缺陷报告。</li>
+            <li><strong>测试报告</strong>：汇总所有阶段产出，AI 生成最终测试报告。</li>
+        </ul>
+    </div>
 
     <div class="page-actions">
         <a class="btn btn-secondary" href="/projects">返回项目列表</a>
@@ -34,16 +44,19 @@
             {% endfor %}
         </select>
 
-        <label for="markdown_file">上传 Markdown 文件</label>
-        <input id="markdown_file" name="markdown_file" type="file" accept=".md,.markdown,text/markdown">
-        <div id="selected-file-name" class="muted" style="margin-top: 8px;">
-            {% if form_data.get('markdown_filename_text') %}
-            已选择文件：{{ form_data.get('markdown_filename_text') }}
-            {% else %}
-            未选择文件
-            {% endif %}
+        <label>上传需求文件</label>
+        <input id="markdown_file" name="markdown_file" type="file" accept=".md,.markdown,.txt,.html,text/markdown,text/plain,text/html" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <button type="button" class="btn btn-secondary" id="file-pick-btn" style="flex-shrink: 0;">选择文件</button>
+            <span id="selected-file-name" class="muted">
+                {% if form_data.get('markdown_filename_text') %}
+                已选择文件：{{ form_data.get('markdown_filename_text') }}
+                {% else %}
+                未选择任何文件
+                {% endif %}
+            </span>
         </div>
-        <div id="selected-file-meta" class="muted" style="margin-top: 4px;"></div>
+        <div id="selected-file-meta" class="muted" style="margin-top: -8px; margin-bottom: 12px;"></div>
 
         <input type="hidden" id="markdown_filename_text" name="markdown_filename_text" value="{{ form_data.get('markdown_filename_text', '') }}">
         <input type="hidden" id="markdown_content_text" name="markdown_content_text" value="{{ form_data.get('markdown_content_text', '') }}">
@@ -57,11 +70,11 @@
         >{{ form_data.get('fallback_content', '') }}</textarea>
 
         <div id="selected-input-source" class="muted" style="margin-top: 8px;">
-            系统优先使用上传文件内容；如果文件为空，则自动使用你粘贴的正文。
+            系统优先使用上传文件内容；如果文件为空，则自动使用你粘贴的正文。当前 MVP 优先适配 Markdown/文本，HTML 需求可先上传或粘贴源码继续分析。
         </div>
 
         <div class="page-actions" style="margin-top: 20px;">
-            <button class="btn" type="submit">保存并进入AI工作台</button>
+            <button class="btn" type="submit">创建需求并进入测试工作流</button>
         </div>
     </form>
 </div>
@@ -74,9 +87,15 @@
     const hiddenName = document.getElementById("markdown_filename_text");
     const hiddenContent = document.getElementById("markdown_content_text");
 
-    if (!fileInput) {
+    const pickBtn = document.getElementById("file-pick-btn");
+
+    if (!fileInput || !pickBtn) {
         return;
     }
+
+    pickBtn.addEventListener("click", () => {
+        fileInput.click();
+    });
 
     fileInput.addEventListener("change", async () => {
         const file = fileInput.files && fileInput.files[0];

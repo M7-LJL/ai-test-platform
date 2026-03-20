@@ -346,6 +346,33 @@ def _analysis_to_requirement_items(
 
     items: list[dict[str, str]] = []
 
+    test_points = analysis_payload.get("test_points", [])
+    if isinstance(test_points, list):
+        for point in test_points:
+            if not isinstance(point, dict):
+                continue
+            title = point.get("title")
+            category = point.get("category")
+            if not isinstance(title, str) or not title.strip():
+                continue
+            case_type = CATEGORY_CASE_TYPE_MAP.get(str(category), "正常流程")
+            source_refs = point.get("source_refs") if isinstance(point.get("source_refs"), list) else []
+            items.append(
+                {
+                    "module": _clean_text(str(point.get("module") or requirement_title)) or "默认模块",
+                    "context": _clean_text(str(point.get("page_or_entry") or point.get("context") or f"{case_type}关注项")),
+                    "sentence": title.strip(),
+                    "case_type": case_type,
+                    "requirement_source": "；".join(_dedupe([str(item) for item in source_refs if _clean_text(str(item))])) or str(point.get("requirement_source") or "需求原文"),
+                    "role": _clean_text(str(point.get("role") or "")),
+                    "preconditions_text": "；".join(_dedupe([str(item) for item in point.get("preconditions", []) if _clean_text(str(item))])),
+                    "action_text": _clean_text(str(point.get("action") or title)),
+                    "verification_focus_text": "；".join(_dedupe([str(item) for item in point.get("verification_focus", []) if _clean_text(str(item))])),
+                    "priority": _clean_text(str(point.get("priority") or "")),
+                    "user_scenario_tag": _clean_text(str(point.get("user_scenario_tag") or "")),
+                }
+            )
+
     selected_points = analysis_payload.get("selected_points", [])
     if isinstance(selected_points, list):
         for point in selected_points:
@@ -526,6 +553,11 @@ def build_locked_case_data_from_item(item: dict[str, Any]) -> dict[str, Any]:
     context = item.get("context", "")
     module_name = item["module"]
     card_kind = item.get("card_kind", "main")
+    explicit_preconditions_text = _clean_text(str(item.get("preconditions_text", "")))
+    explicit_action_text = _clean_text(str(item.get("action_text", "")))
+    explicit_verification_focus_text = _clean_text(str(item.get("verification_focus_text", "")))
+    explicit_role = _clean_text(str(item.get("role", "")))
+    explicit_scene_tag = _clean_text(str(item.get("user_scenario_tag", "")))
 
     preconditions: list[str] = []
     config_conditions: list[str] = []
@@ -579,10 +611,17 @@ def build_locked_case_data_from_item(item: dict[str, Any]) -> dict[str, Any]:
     else:
         assertions.append(_clean_text(sentence))
 
+    if explicit_preconditions_text:
+        preconditions.extend([segment for segment in explicit_preconditions_text.split("；") if _clean_text(segment)])
+    if explicit_verification_focus_text:
+        assertions.extend([segment for segment in explicit_verification_focus_text.split("；") if _clean_text(segment)])
+    if explicit_scene_tag:
+        config_conditions.append(f"真实用户场景：{explicit_scene_tag}")
+
     return _normalize_locked_case_data(
         {
             "scene_name": _scene_name_for_card(sentence, card_kind),
-            "user_type": _infer_user_type(sentence),
+            "user_type": explicit_role or _infer_user_type(sentence),
             "entry": _infer_entry(sentence, context, module_name),
             "business_line": _infer_business_line(sentence),
             "scenario_type": _infer_scenario_type(sentence),
@@ -592,7 +631,7 @@ def build_locked_case_data_from_item(item: dict[str, Any]) -> dict[str, Any]:
             "business_object": _infer_business_object(sentence),
             "preconditions": preconditions,
             "config_conditions": config_conditions,
-            "action": _clean_text(re.sub(r"^验证", "", sentence)),
+            "action": explicit_action_text or _clean_text(re.sub(r"^验证", "", sentence)),
             "expected_results": expected_results,
             "assertions": assertions,
             "exception_handling": exception_handling,
@@ -686,7 +725,8 @@ def _build_generic_cases_for_item(item: dict[str, str]) -> list[dict[str, str]]:
             section="",
             case_type=rendered_case_type,
             priority=(
-                _infer_priority_from_title(card["sentence"])
+                card.get("priority")
+                or _infer_priority_from_title(card["sentence"])
                 if rendered_case_type == "正常流程"
                 else CASE_TYPE_PRIORITY.get(rendered_case_type, "P2")
             ),
@@ -767,9 +807,12 @@ def generate_structured_cases(
     content: str,
     analysis_payload: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
-    extracted_items = _merge_requirement_items(requirement_title, content, analysis_payload)
-    if not extracted_items:
-        extracted_items = _extract_requirement_items(requirement_title, content)
+    if isinstance(analysis_payload, dict) and isinstance(analysis_payload.get("test_points"), list) and analysis_payload.get("test_points"):
+        extracted_items = _analysis_to_requirement_items(requirement_title, analysis_payload)
+    else:
+        extracted_items = _merge_requirement_items(requirement_title, content, analysis_payload)
+        if not extracted_items:
+            extracted_items = _extract_requirement_items(requirement_title, content)
     for item in extracted_items:
         item["requirement_title"] = requirement_title
     return _build_structured_cases(extracted_items)
@@ -782,9 +825,12 @@ def generate_xmind_markdown(
 ) -> str:
     structured_cases = generate_structured_cases(requirement_title, content, analysis_payload=analysis_payload)
 
-    extracted_items = _merge_requirement_items(requirement_title, content, analysis_payload)
-    if not extracted_items:
-        extracted_items = _extract_requirement_items(requirement_title, content)
+    if isinstance(analysis_payload, dict) and isinstance(analysis_payload.get("test_points"), list) and analysis_payload.get("test_points"):
+        extracted_items = _analysis_to_requirement_items(requirement_title, analysis_payload)
+    else:
+        extracted_items = _merge_requirement_items(requirement_title, content, analysis_payload)
+        if not extracted_items:
+            extracted_items = _extract_requirement_items(requirement_title, content)
 
     module_map: dict[str, dict[str, list[dict[str, str]]]] = {}
     case_map: dict[str, dict[str, list[dict[str, str]]]] = {}

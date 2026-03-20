@@ -85,9 +85,17 @@ def ensure_application_schema() -> None:
         for ddl in (*missing_requirement_columns, *missing_testcase_columns):
             connection.execute(text(ddl))
 
-    from app.models import RequirementReviewPoint
+    if "test_workflows" in existing_tables:
+        wf_columns = {col["name"] for col in inspector.get_columns("test_workflows")}
+        if "requirement_id" not in wf_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE test_workflows ADD COLUMN requirement_id INTEGER REFERENCES requirements(id)"))
+
+    from app.models import RequirementReviewPoint, TestWorkflow, WorkflowStage
 
     RequirementReviewPoint.__table__.create(bind=engine, checkfirst=True)
+    TestWorkflow.__table__.create(bind=engine, checkfirst=True)
+    WorkflowStage.__table__.create(bind=engine, checkfirst=True)
 
 
 def get_db() -> Generator[Session, None, None]:

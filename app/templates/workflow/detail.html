@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}{{ workflow.name }} - 测试工作流{% endblock %}
+
+{% block content %}
+<style>
+    .wf-layout {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 24px;
+        align-items: start;
+    }
+    .wf-sidebar {
+        position: sticky;
+        top: 24px;
+    }
+    .wf-nav {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    .wf-nav li {
+        margin-bottom: 4px;
+    }
+    .wf-nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #374151;
+        font-weight: 500;
+        font-size: 14px;
+        transition: background 0.15s;
+    }
+    .wf-nav a:hover {
+        background: #f3f4f6;
+    }
+    .wf-nav a.active {
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-weight: 700;
+    }
+    .wf-step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        font-size: 13px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+    .step-pending .wf-step-num {
+        background: #f3f4f6;
+        color: #9ca3af;
+    }
+    .step-running .wf-step-num {
+        background: #fef3c7;
+        color: #b45309;
+    }
+    .step-completed .wf-step-num {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .step-failed .wf-step-num {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .wf-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+    .step-pending .wf-status-dot { background: #d1d5db; }
+    .step-running .wf-status-dot { background: #f59e0b; }
+    .step-completed .wf-status-dot { background: #10b981; }
+    .step-failed .wf-status-dot { background: #ef4444; }
+
+    .wf-main {
+        min-width: 0;
+    }
+    .wf-section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 16px;
+    }
+    .wf-section-title {
+        margin: 0 0 16px 0;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .wf-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+    .wf-md-output {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 20px;
+        line-height: 1.7;
+        overflow-x: auto;
+    }
+    .wf-md-output h1, .wf-md-output h2, .wf-md-output h3 {
+        margin-top: 20px;
+        margin-bottom: 8px;
+    }
+    .wf-md-output h1 { font-size: 22px; }
+    .wf-md-output h2 { font-size: 18px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    .wf-md-output h3 { font-size: 16px; }
+    .wf-md-output ul, .wf-md-output ol { padding-left: 20px; }
+    .wf-md-output li { margin-bottom: 4px; }
+    .wf-md-output table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    .wf-md-output th, .wf-md-output td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+    .wf-md-output th { background: #f8fafc; font-weight: 700; }
+    .wf-md-output code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .wf-md-output pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    .wf-md-output pre code { background: none; color: inherit; padding: 0; }
+    .wf-md-output blockquote { border-left: 3px solid #2563eb; margin: 12px 0; padding: 8px 16px; background: #eff6ff; }
+    .wf-md-output input[type="checkbox"] { margin-right: 6px; }
+    .wf-header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+    .wf-meta {
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+        color: #6b7280;
+    }
+    .wf-loading {
+        display: none;
+        align-items: center;
+        gap: 10px;
+        padding: 20px;
+        color: #6b7280;
+    }
+    .wf-loading.show { display: flex; }
+    .wf-spinner {
+        width: 20px;
+        height: 20px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tab-raw, .tab-preview { cursor: pointer; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; border: 1px solid #d1d5db; background: #fff; }
+    .tab-raw.active, .tab-preview.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    @media (max-width: 768px) {
+        .wf-layout { grid-template-columns: 1fr; }
+        .wf-sidebar { position: static; }
+    }
+</style>
+
+<div class="wf-header-bar">
+    <div>
+        <h1 style="margin: 0 0 4px 0;">{{ workflow.name }}</h1>
+        <div class="wf-meta">
+            <span>项目：{{ workflow.project.name }}</span>
+            {% if workflow.requirement %}
+            <span>需求：<a href="/requirements/{{ workflow.requirement.id }}" style="color: #2563eb; text-decoration: underline;">{{ workflow.requirement.title }}</a></span>
+            {% endif %}
+            <span>状态：
+                {% if workflow.status == 'draft' %}草稿
+                {% elif workflow.status == 'in_progress' %}进行中
+                {% elif workflow.status == 'completed' %}已完成
+                {% endif %}
+            </span>
+            <span>创建于 {{ workflow.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        </div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <a href="/workflow/{{ workflow.id }}/export" class="btn btn-secondary" style="font-size: 13px;">导出全部产出</a>
+        {% if workflow.requirement %}
+        <a href="/requirements/{{ workflow.requirement.id }}" class="btn btn-secondary" style="font-size: 13px;">查看需求分析</a>
+        {% endif %}
+        <a href="/projects/{{ workflow.project_id }}" class="btn btn-secondary" style="font-size: 13px;">返回项目</a>
+    </div>
+</div>
+
+<div class="wf-layout">
+    <aside class="wf-sidebar">
+        <div class="card" style="padding: 12px;">
+            <div style="font-weight: 700; font-size: 13px; color: #6b7280; padding: 6px 14px; margin-bottom: 4px;">工作流阶段</div>
+            <ul class="wf-nav">
+                {% for s in stages %}
+                <li>
+                    <a href="/workflow/{{ workflow.id }}?stage={{ s.stage_type }}"
+                       class="step-{{ s.status }}{% if s.stage_type == active_stage %} active{% endif %}">
+                        <span class="wf-step-num">{{ loop.index }}</span>
+                        <span>{{ stage_labels[s.stage_type] }}</span>
+                        <span class="wf-status-dot"></span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+
+    <div class="wf-main">
+        <div class="wf-section-card">
+            <h2 class="wf-section-title">
+                {{ stage_labels[current_stage.stage_type] }}
+                {% if current_stage.status == 'completed' %}
+                <span class="tag" style="background: #d1fae5; color: #065f46;">已完成</span>
+                {% elif current_stage.status == 'running' %}
+                <span class="tag" style="background: #fef3c7; color: #b45309;">生成中</span>
+                {% elif current_stage.status == 'failed' %}
+                <span class="tag" style="background: #fee2e2; color: #991b1b;">失败</span>
+                {% else %}
+                <span class="tag">待处理</span>
+                {% endif %}
+            </h2>
+
+            <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/save">
+                <label for="input_content">输入内容
+                    <span style="font-weight: 400; color: #6b7280; font-size: 13px;">
+                        {% if current_stage.stage_type == 'outline' %}（粘贴 PRD / 需求文档）
+                        {% elif current_stage.stage_type == 'analysis' %}（上一阶段的测试大纲会自动填入）
+                        {% elif current_stage.stage_type == 'cases' %}（需求分析结果会自动填入）
+                        {% elif current_stage.stage_type == 'defects' %}（粘贴测试执行结果 / 失败日志）
+                        {% elif current_stage.stage_type == 'report' %}（粘贴执行统计和缺陷数据）
+                        {% endif %}
+                    </span>
+                </label>
+                <textarea id="input_content" name="input_content" rows="10"
+                    placeholder="输入或粘贴内容...">{{ current_stage.input_content or '' }}</textarea>
+
+                <div class="wf-actions">
+                    <button type="submit" class="btn btn-secondary">保存输入</button>
+                </div>
+            </form>
+
+            <div style="margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 20px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                    <label style="margin: 0; font-size: 15px;">AI 生成结果</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        {% if current_stage.output_content %}
+                        <button class="tab-preview active" onclick="toggleView('preview')">预览</button>
+                        <button class="tab-raw" onclick="toggleView('raw')">原始 Markdown</button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div id="ai-loading" class="wf-loading">
+                    <span class="wf-spinner"></span>
+                    <span>AI 正在生成，请稍候...</span>
+                </div>
+
+                {% if current_stage.output_content %}
+                <div id="md-preview" class="wf-md-output"></div>
+                <div id="md-raw" style="display: none;">
+                    <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/save">
+                        <input type="hidden" name="input_content" value="{{ current_stage.input_content or '' }}">
+                        <textarea id="output_content" name="output_content" rows="20"
+                            style="font-family: monospace; font-size: 13px;">{{ current_stage.output_content }}</textarea>
+                        <div class="wf-actions">
+                            <button type="submit" class="btn btn-secondary">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+                {% else %}
+                <div style="padding: 24px; text-align: center; color: #9ca3af; background: #f9fafb; border-radius: 8px;">
+                    尚未生成，请填写输入内容后点击「AI 生成」
+                </div>
+                {% endif %}
+
+                <div class="wf-actions" style="margin-top: 16px;">
+                    {% if can_use_llm %}
+                    <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/generate"
+                          id="generate-form">
+                        <button type="submit" class="btn" id="generate-btn"
+                            onclick="document.getElementById('ai-loading').classList.add('show'); this.disabled=true; this.textContent='生成中...';">
+                            {% if current_stage.output_content %}重新生成{% else %}AI 生成{{ stage_labels[current_stage.stage_type] }}{% endif %}
+                        </button>
+                    </form>
+                    {% else %}
+                    <span style="color: #ef4444; font-size: 13px;">LLM 未配置，请在 .env 中设置 LLM_API_KEY</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var raw = document.getElementById('output_content');
+    var preview = document.getElementById('md-preview');
+    if (raw && preview) {
+        preview.innerHTML = marked.parse(raw.value);
+        preview.querySelectorAll('input[type="checkbox"]').forEach(function(cb) { cb.disabled = true; });
+    }
+});
+function toggleView(mode) {
+    var preview = document.getElementById('md-preview');
+    var raw = document.getElementById('md-raw');
+    var btnPreview = document.querySelector('.tab-preview');
+    var btnRaw = document.querySelector('.tab-raw');
+    if (mode === 'raw') {
+        preview.style.display = 'none';
+        raw.style.display = 'block';
+        btnPreview.classList.remove('active');
+        btnRaw.classList.add('active');
+    } else {
+        preview.style.display = 'block';
+        raw.style.display = 'none';
+        btnPreview.classList.add('active');
+        btnRaw.classList.remove('active');
+    }
+}
+</script>
+{% endblock %}

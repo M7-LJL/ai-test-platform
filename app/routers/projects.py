@@ -3,10 +3,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, subqueryload
 
 from app.database import get_db
-from app.models import Project
+from app.models import Project, TestWorkflow
 from app.services.report_service import generate_report
 
 
@@ -71,6 +71,7 @@ def project_detail_page(project_id: int, request: Request, db: Session = Depends
         .options(
             joinedload(Project.requirements),
             joinedload(Project.test_cases),
+            subqueryload(Project.workflows).joinedload(TestWorkflow.requirement),
         )
         .filter(Project.id == project_id)
         .first()
@@ -80,6 +81,7 @@ def project_detail_page(project_id: int, request: Request, db: Session = Depends
 
     requirements = sorted(project.requirements, key=lambda item: item.created_at, reverse=True)
     test_cases = sorted(project.test_cases, key=lambda item: item.created_at, reverse=True)
+    workflows = sorted(project.workflows, key=lambda item: item.created_at, reverse=True)
     return templates.TemplateResponse(
         request,
         "projects/detail.html",
@@ -87,6 +89,7 @@ def project_detail_page(project_id: int, request: Request, db: Session = Depends
             "project": project,
             "requirements": requirements,
             "test_cases": test_cases,
+            "workflows": workflows,
         },
     )
 

@@ -28,6 +28,11 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    workflows: Mapped[list["TestWorkflow"]] = relationship(
+        "TestWorkflow",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class Requirement(Base):
@@ -59,6 +64,10 @@ class Requirement(Base):
         back_populates="requirement",
         cascade="all, delete-orphan",
         order_by="RequirementReviewPoint.sort_order",
+    )
+    workflows: Mapped[list["TestWorkflow"]] = relationship(
+        "TestWorkflow",
+        back_populates="requirement",
     )
 
 
@@ -123,3 +132,41 @@ class TestCase(Base):
 
     project: Mapped["Project"] = relationship("Project", back_populates="test_cases")
     requirement: Mapped[Requirement | None] = relationship("Requirement", back_populates="test_cases")
+
+
+class TestWorkflow(Base):
+    __tablename__ = "test_workflows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    requirement_id: Mapped[int | None] = mapped_column(ForeignKey("requirements.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="draft", nullable=False)
+    current_stage: Mapped[str] = mapped_column(String(30), default="outline", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="workflows")
+    requirement: Mapped["Requirement | None"] = relationship("Requirement", back_populates="workflows")
+    stages: Mapped[list["WorkflowStage"]] = relationship(
+        "WorkflowStage",
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="WorkflowStage.sort_order",
+    )
+
+
+class WorkflowStage(Base):
+    __tablename__ = "workflow_stages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("test_workflows.id"), nullable=False, index=True)
+    stage_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    input_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_prompt_used: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    workflow: Mapped["TestWorkflow"] = relationship("TestWorkflow", back_populates="stages")

@@ -10,6 +10,7 @@ from app.database import Base, engine, ensure_application_schema
 from app.routers.projects import router as projects_router
 from app.routers.requirements import router as requirements_router
 from app.routers.testcases import router as testcases_router
+from app.routers.workflow import router as workflow_router
 import app.models  # noqa: F401
 
 
@@ -30,6 +31,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(projects_router)
 app.include_router(requirements_router)
 app.include_router(testcases_router)
+app.include_router(workflow_router)
 
 
 @app.get("/", response_class=HTMLResponse)
