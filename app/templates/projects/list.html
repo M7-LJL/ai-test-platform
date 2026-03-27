@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block title %}项目列表{% endblock %}
+{% block page_title %}项目管理{% endblock %}
+{% block page_subtitle %}集中查看项目、进入详情页，并从项目维度启动后续测试活动。{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -10,31 +12,35 @@
 </div>
 
 {% if projects %}
-    {% for project in projects %}
-    <div class="card">
-        <h2>{{ project.name }}</h2>
-        <p>{{ project.description or "暂无描述" }}</p>
-        <p class="muted">创建时间：{{ project.created_at }}</p>
-        <a class="btn btn-secondary" href="/projects/{{ project.id }}">查看详情</a>
-        <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求</a>
-        <a class="btn" href="/projects/{{ project.id }}/report">生成报告</a>
-        <button
-            class="btn btn-secondary"
-            type="button"
-            data-project-id="{{ project.id }}"
-            data-project-name="{{ project.name }}"
-            onclick="confirmDeleteProject(this)"
-        >
-            删除
-        </button>
-        <form
-            id="delete-project-form-{{ project.id }}"
-            method="post"
-            action="/projects/{{ project.id }}/delete"
-            style="display: none;"
-        ></form>
+    <div class="panel-grid">
+        {% for project in projects %}
+        <div class="card" style="margin-bottom: 0;">
+            <h2>{{ project.name }}</h2>
+            <p>{{ project.description or "暂无描述" }}</p>
+            <p class="muted">创建时间：{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</p>
+            <div class="page-actions">
+                <a class="btn btn-secondary" href="/projects/{{ project.id }}">查看详情</a>
+                <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求</a>
+                <a class="btn btn-secondary" href="/projects/{{ project.id }}/report">生成报告</a>
+                <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-project-id="{{ project.id }}"
+                    data-project-name="{{ project.name }}"
+                    onclick="confirmDeleteProject(this)"
+                >
+                    删除
+                </button>
+            </div>
+            <form
+                id="delete-project-form-{{ project.id }}"
+                method="post"
+                action="/projects/{{ project.id }}/delete"
+                style="display: none;"
+            ></form>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 {% else %}
 <div class="card">
     <p>当前还没有项目，先创建第一个项目吧。</p>

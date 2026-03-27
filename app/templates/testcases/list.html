@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}用例中心{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>用例中心</h1>
+    <p class="muted">统一查看、筛选和维护测试用例。</p>
+</div>
+
+<div class="card">
+    <h2>怎么用这页</h2>
+    <div class="panel-grid">
+        <div class="info-panel">
+            <h3>这页做什么</h3>
+            <ul class="dense-list">
+                <li>查看当前项目或需求下的正式测试用例</li>
+                <li>筛选、搜索、编辑和归类用例</li>
+                <li>勾选一批用例后直接创建测试计划</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>推荐起手动作</h3>
+            <ul class="dense-list">
+                <li>先按项目或需求筛选，确认当前范围</li>
+                <li>如需分类管理，先创建套件</li>
+                <li>如需进入执行，勾选用例后创建测试计划</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>适合什么时候来</h3>
+            <ul class="dense-list">
+                <li>工作流已经生成正式用例后</li>
+                <li>需要手工微调用例内容时</li>
+                <li>准备挑选一批回归用例时</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/testcases">
+        <div class="panel-grid">
+            <div>
+                <label>项目</label>
+                <select name="project_id">
+                    <option value="">全部项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>需求</label>
+                <select name="requirement_id">
+                    <option value="">全部需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>
+                        {{ requirement.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label>状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    {% for item in ["draft", "in_progress", "completed"] %}
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>关键词</label>
+                <input type="text" name="keyword" value="{{ keyword }}" placeholder="标题 / 用例ID / 模块">
+            </div>
+        </div>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">筛选</button>
+            <a class="btn btn-secondary" href="/testcases">重置</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>创建套件</h2>
+    <p class="muted">先创建套件，再在编辑用例时把用例归类到对应套件。</p>
+
+    <form method="post" action="/test-suites/create">
+        <div class="panel-grid">
+            <div>
+                <label>所属项目</label>
+                <select name="project_id" required>
+                    <option value="">请选择项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>套件名称</label>
+                <input type="text" name="name" placeholder="例如：支付主流程回归" required>
+            </div>
+
+            <div>
+                <label>描述</label>
+                <input type="text" name="description" placeholder="可选，说明套件用途">
+            </div>
+        </div>
+
+        <input type="hidden" name="redirect_to" value="/testcases{% if selected_project_id %}?project_id={{ selected_project_id }}{% endif %}">
+
+        <div class="page-actions">
+            <button class="btn" type="submit">创建套件</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>批量创建测试计划</h2>
+    <p class="muted">勾选用例后，可直接创建一个测试计划。</p>
+
+    <form method="post" action="/plans/create" id="create-plan-form">
+        <div class="panel-grid">
+            <div>
+                <label>所属项目</label>
+                <select name="project_id" required>
+                    <option value="">请选择项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>关联需求</label>
+                <select name="requirement_id">
+                    <option value="">不关联需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>
+                        {{ requirement.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>负责人</label>
+                <input type="text" name="owner" placeholder="例如：QA-张三">
+            </div>
+
+            <div class="editor-field-wide">
+                <label>计划名称</label>
+                <input type="text" name="name" placeholder="例如：支付需求回归计划" required>
+            </div>
+
+            <div class="editor-field-wide">
+                <label>计划说明</label>
+                <textarea name="description" rows="3" placeholder="可填写本轮回归范围和目标"></textarea>
+            </div>
+        </div>
+
+        <input type="hidden" name="selected_case_ids" id="selected_case_ids" value="">
+
+        <div class="page-actions">
+            <button class="btn" type="submit">用已勾选用例创建计划</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>用例列表</h2>
+    {% if testcases %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="toggle-all-cases"></th>
+                    <th>用例ID</th>
+                    <th>标题</th>
+                    <th>项目</th>
+                    <th>需求</th>
+                    <th>套件</th>
+                    <th>模块</th>
+                    <th>优先级</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for testcase in testcases %}
+                <tr>
+                    <td>
+                        <input type="checkbox" class="case-checkbox" value="{{ testcase.id }}">
+                    </td>
+                    <td>{{ testcase.case_id }}</td>
+                    <td>{{ testcase.title }}</td>
+                    <td>{{ testcase.project.name if testcase.project else "-" }}</td>
+                    <td>
+                        {% if testcase.requirement_id %}
+                        <a href="/requirements/{{ testcase.requirement_id }}">{{ testcase.requirement.title if testcase.requirement else testcase.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ testcase.suite.name if testcase.suite else "-" }}</td>
+                    <td>{{ testcase.module or "-" }}</td>
+                    <td>{{ testcase.priority or "-" }}</td>
+                    <td>
+                        {{ testcase.status }}
+                        {% if testcase.locked %}<span class="muted"> / 已锁定</span>{% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前没有符合条件的测试用例。</p>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+    const hiddenInput = document.getElementById("selected_case_ids");
+    const checkboxes = Array.from(document.querySelectorAll(".case-checkbox"));
+    const toggleAll = document.getElementById("toggle-all-cases");
+
+    function syncSelectedIds() {
+        hiddenInput.value = checkboxes.filter(item => item.checked).map(item => item.value).join(",");
+    }
+
+    if (toggleAll) {
+        toggleAll.addEventListener("change", function () {
+            checkboxes.forEach(item => {
+                item.checked = toggleAll.checked;
+            });
+            syncSelectedIds();
+        });
+    }
+
+    checkboxes.forEach(item => {
+        item.addEventListener("change", syncSelectedIds);
+    });
+})();
+</script>
+{% endblock %}

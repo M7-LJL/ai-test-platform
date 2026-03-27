@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}执行中心{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>执行中心</h1>
+    <p class="muted">查看测试计划、执行进度和结果统计。</p>
+</div>
+
+<div class="card">
+    <h2>怎么用这页</h2>
+    <div class="panel-grid">
+        <div class="info-panel">
+            <h3>这页做什么</h3>
+            <ul class="dense-list">
+                <li>统一查看测试计划和执行进度</li>
+                <li>进入计划详情后记录每条用例的执行结果</li>
+                <li>跟踪当前计划是草稿、执行中还是已完成</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>推荐起手动作</h3>
+            <ul class="dense-list">
+                <li>如果还没有计划，可先创建一个空计划</li>
+                <li>如果已经在用例中心选好用例，可直接从那里批量建计划</li>
+                <li>进入计划详情后逐条填写通过、失败、阻塞结果</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>适合什么时候来</h3>
+            <ul class="dense-list">
+                <li>准备开始一轮提测或回归时</li>
+                <li>想看本轮还有多少未执行用例时</li>
+                <li>需要把执行结果沉淀下来时</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/plans">
+        <div class="panel-grid">
+            <div>
+                <label>项目</label>
+                <select name="project_id">
+                    <option value="">全部项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>需求</label>
+                <select name="requirement_id">
+                    <option value="">全部需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>
+                        {{ requirement.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    {% for item in ["draft", "in_progress", "completed"] %}
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">筛选</button>
+            <a class="btn btn-secondary" href="/plans">重置</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>快速创建计划</h2>
+    <form method="post" action="/plans/create">
+        <div class="panel-grid">
+            <div>
+                <label>所属项目</label>
+                <select name="project_id" required>
+                    <option value="">请选择项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>关联需求</label>
+                <select name="requirement_id">
+                    <option value="">不关联需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}">{{ requirement.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>负责人</label>
+                <input type="text" name="owner" placeholder="例如：QA-张三">
+            </div>
+
+            <div class="editor-field-wide">
+                <label>计划名称</label>
+                <input type="text" name="name" placeholder="例如：订单模块回归计划" required>
+            </div>
+
+            <div class="editor-field-wide">
+                <label>计划说明</label>
+                <textarea name="description" rows="3"></textarea>
+            </div>
+        </div>
+
+        <input type="hidden" name="selected_case_ids" value="">
+
+        <div class="page-actions">
+            <button class="btn" type="submit">创建空计划</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>测试计划列表</h2>
+    {% if plans %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>计划名称</th>
+                    <th>所属项目</th>
+                    <th>关联需求</th>
+                    <th>负责人</th>
+                    <th>状态</th>
+                    <th>用例数</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                <tr>
+                    <td>{{ plan.name }}</td>
+                    <td>{{ plan.project.name if plan.project else "-" }}</td>
+                    <td>
+                        {% if plan.requirement_id %}
+                        <a href="/requirements/{{ plan.requirement_id }}">{{ plan.requirement.title if plan.requirement else plan.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ plan.owner or "-" }}</td>
+                    <td>{{ plan.status }}</td>
+                    <td>{{ plan.plan_cases | length }}</td>
+                    <td>{{ plan.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <a class="btn btn-secondary" href="/plans/{{ plan.id }}">查看详情</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前还没有测试计划。</p>
+    {% endif %}
+</div>
+{% endblock %}

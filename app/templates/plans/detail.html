@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}测试计划详情{% endblock %}
+{% block page_title %}执行中心{% endblock %}
+{% block page_subtitle %}记录每条用例的执行结果，并把失败项快速沉淀为缺陷。{% endblock %}
+
+{% block extra_head %}
+<style>
+    .plan-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+        gap: 18px;
+        align-items: start;
+    }
+    .plan-summary-card {
+        padding: 18px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        border: 1px solid #e2e8f0;
+    }
+    .plan-summary-card h2 {
+        margin-bottom: 6px;
+        font-size: 18px;
+    }
+    .plan-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+    }
+    .plan-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .plan-progress-card {
+        padding: 18px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #eef6ff 0%, #f8fbff 100%);
+        border: 1px solid #bfdbfe;
+    }
+    .plan-progress-card h3 {
+        margin-bottom: 6px;
+        font-size: 16px;
+    }
+    .plan-progress-bar {
+        width: 100%;
+        height: 10px;
+        margin-top: 14px;
+        border-radius: 999px;
+        background: #dbeafe;
+        overflow: hidden;
+    }
+    .plan-progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2563eb 0%, #22c55e 100%);
+    }
+    .plan-execution-list {
+        display: grid;
+        gap: 16px;
+    }
+    .plan-case-card {
+        padding: 20px;
+        border-radius: 20px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+    }
+    .plan-case-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+    .plan-case-title {
+        margin-bottom: 6px;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.4;
+    }
+    .plan-case-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .plan-case-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+    .plan-case-section {
+        min-width: 0;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+    .plan-case-section-wide {
+        grid-column: 1 / -1;
+    }
+    .plan-case-section h4 {
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+    .plan-case-text {
+        white-space: pre-wrap;
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.65;
+    }
+    .plan-case-form {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 16px;
+    }
+    .plan-case-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .plan-case-form-grid .editor-field-wide {
+        grid-column: 1 / -1;
+    }
+    .plan-defect-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .plan-status-tag {
+        background: #f1f5f9;
+        color: #475569;
+    }
+    .plan-status-tag.is-passed {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .plan-status-tag.is-failed {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+    .plan-status-tag.is-blocked {
+        background: #fef3c7;
+        color: #b45309;
+    }
+    @media (max-width: 980px) {
+        .plan-overview,
+        .plan-case-grid,
+        .plan-case-form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="plan-overview">
+        <div class="plan-summary-card">
+            <h1>{{ plan.name }}</h1>
+            <p>{{ plan.description or "暂无说明" }}</p>
+            <div class="plan-chip-row">
+                <span class="plan-chip">所属项目：{{ plan.project.name if plan.project else "-" }}</span>
+                <span class="plan-chip">负责人：{{ plan.owner or "-" }}</span>
+                <span class="plan-chip">状态：{{ plan.status }}</span>
+                {% if plan.requirement_id %}
+                <span class="plan-chip">关联需求：{{ plan.requirement.title if plan.requirement else plan.requirement_id }}</span>
+                {% endif %}
+                {% if stats.latest_executed_at %}
+                <span class="plan-chip">最近执行：{{ stats.latest_executed_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                {% endif %}
+            </div>
+            <div class="page-actions">
+                <a class="btn btn-secondary" href="/plans">返回执行中心</a>
+                {% if plan.project_id %}
+                <a class="btn btn-secondary" href="/projects/{{ plan.project_id }}">返回项目详情</a>
+                {% endif %}
+                {% if plan.requirement_id %}
+                <a class="btn btn-secondary" href="/requirements/{{ plan.requirement_id }}">查看关联需求</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <aside class="plan-progress-card">
+            <div class="metric-label">执行概览</div>
+            <h3>已执行 {{ stats.executed }}/{{ stats.total }} 条</h3>
+            <p class="muted" style="margin-bottom: 0;">完成率 {{ stats.completion_rate }}%，通过率 {{ stats.pass_rate }}%，已关联缺陷 {{ stats.defect_count }} 条。</p>
+            <div class="plan-progress-bar">
+                <div class="plan-progress-fill" style="width: {{ stats.completion_rate }}%;"></div>
+            </div>
+            <div class="plan-chip-row" style="margin-top: 14px;">
+                <span class="plan-chip">未执行 {{ stats.untested }}</span>
+                <span class="plan-chip">通过 {{ stats.passed }}</span>
+                <span class="plan-chip">失败 {{ stats.failed }}</span>
+                <span class="plan-chip">阻塞 {{ stats.blocked }}</span>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<div class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-label">总用例数</span>
+        <strong class="metric-value">{{ stats.total }}</strong>
+        <span class="metric-note">本轮执行范围</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-label">已执行</span>
+        <strong class="metric-value">{{ stats.executed }}</strong>
+        <span class="metric-note">完成率 {{ stats.completion_rate }}%</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-label">通过率</span>
+        <strong class="metric-value">{{ stats.pass_rate }}%</strong>
+        <span class="metric-note">已执行样本内统计</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-label">已转缺陷</span>
+        <strong class="metric-value">{{ stats.defect_count }}</strong>
+        <span class="metric-note">关联执行失败问题</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>执行列表</h2>
+    {% if plan_cases %}
+    <div class="plan-execution-list">
+        {% for item in plan_cases %}
+        {% set status_label_map = {"untested": "未执行", "passed": "通过", "failed": "失败", "blocked": "阻塞"} %}
+        <div class="plan-case-card">
+            <div class="plan-case-head">
+                <div>
+                    <div class="plan-case-title">
+                        {% if item.test_case %}
+                        <a href="/testcases/{{ item.test_case.id }}/edit">{{ item.test_case.title }}</a>
+                        {% else %}
+                        未关联用例
+                        {% endif %}
+                    </div>
+                    <div class="plan-case-meta">
+                        <span class="plan-chip">{{ item.test_case.case_id if item.test_case else "-" }}</span>
+                        <span class="plan-chip">优先级：{{ item.test_case.priority if item.test_case and item.test_case.priority else "-" }}</span>
+                        <span class="plan-chip">模块：{{ item.test_case.module if item.test_case and item.test_case.module else "-" }}</span>
+                    </div>
+                </div>
+                <span class="tag plan-status-tag {% if item.run_status == 'passed' %}is-passed{% elif item.run_status == 'failed' %}is-failed{% elif item.run_status == 'blocked' %}is-blocked{% endif %}">
+                    {{ status_label_map.get(item.run_status, item.run_status) }}
+                </span>
+            </div>
+
+            <div class="plan-case-grid">
+                <div class="plan-case-section">
+                    <h4>执行信息</h4>
+                    <div class="plan-case-text">执行人：{{ item.executed_by or "-" }}</div>
+                    <div class="plan-case-text">执行时间：{% if item.executed_at %}{{ item.executed_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</div>
+                    <div class="plan-case-text">环境信息：{{ item.environment_info or "-" }}</div>
+                </div>
+                <div class="plan-case-section">
+                    <h4>预期结果快照</h4>
+                    <div class="plan-case-text">{{ item.expected_result_snapshot or (item.test_case.expected if item.test_case else "-") }}</div>
+                </div>
+                <div class="plan-case-section">
+                    <h4>附件</h4>
+                    <div class="plan-case-text">{% if item.attachments %}{{ item.attachments | join('\n') }}{% else %}-{% endif %}</div>
+                </div>
+                <div class="plan-case-section plan-case-section-wide">
+                    <h4>前置条件</h4>
+                    <div class="plan-case-text">{{ item.test_case.preconditions if item.test_case and item.test_case.preconditions else "-" }}</div>
+                </div>
+                <div class="plan-case-section plan-case-section-wide">
+                    <h4>测试步骤</h4>
+                    <div class="plan-case-text">{{ item.test_case.steps if item.test_case and item.test_case.steps else "-" }}</div>
+                </div>
+                <div class="plan-case-section plan-case-section-wide">
+                    <h4>实际结果</h4>
+                    <div class="plan-case-text">{{ item.actual_result or "-" }}</div>
+                </div>
+                <div class="plan-case-section plan-case-section-wide">
+                    <h4>执行备注</h4>
+                    <div class="plan-case-text">{{ item.result_comment or "-" }}</div>
+                </div>
+            </div>
+
+            {% if item.defects %}
+            <div class="plan-defect-list">
+                {% for defect in item.defects %}
+                <a class="tag tag-accent" href="/defects/{{ defect.id }}">缺陷 #{{ defect.id }} · {{ defect.status }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form class="plan-case-form" method="post" action="/plans/{{ plan.id }}/cases/{{ item.id }}/result">
+                <div class="plan-case-form-grid">
+                    <div>
+                        <label>执行结果</label>
+                        <select name="run_status">
+                            {% for status in ["untested", "passed", "failed", "blocked"] %}
+                            <option value="{{ status }}" {% if item.run_status == status %}selected{% endif %}>
+                                {{ status_label_map.get(status, status) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>执行人</label>
+                        <input type="text" name="executed_by" value="{{ item.executed_by or '' }}" placeholder="例如：QA-张三">
+                    </div>
+                    <div class="editor-field-wide">
+                        <label>实际结果</label>
+                        <textarea name="actual_result" rows="3" placeholder="建议填写实际表现、错误提示、接口返回或页面状态">{{ item.actual_result or "" }}</textarea>
+                    </div>
+                    <div class="editor-field-wide">
+                        <label>环境信息</label>
+                        <textarea name="environment_info" rows="2" placeholder="例如：测试环境 / build 版本 / 浏览器 / 机型">{{ item.environment_info or "" }}</textarea>
+                    </div>
+                    <div class="editor-field-wide">
+                        <label>执行备注</label>
+                        <textarea name="result_comment" rows="3" placeholder="{% if item.run_status == 'failed' %}可补充异常现象、报错链路、定位信息{% elif item.run_status == 'blocked' %}可补充阻塞原因、依赖条件、恢复建议{% else %}可补充执行结论和说明{% endif %}">{{ item.result_comment or "" }}</textarea>
+                    </div>
+                    <div class="editor-field-wide">
+                        <label>附件链接</label>
+                        <textarea name="attachments_text" rows="3" placeholder="每行一条，例如截图地址、日志地址、录屏路径">{% if item.attachments %}{{ item.attachments | join('\n') }}{% endif %}</textarea>
+                    </div>
+                </div>
+                <div class="page-actions">
+                    <button class="btn" type="submit">保存执行结果</button>
+                </div>
+            </form>
+            {% if item.test_case and item.run_status == "failed" %}
+            <form method="post" action="/defects/create" style="margin-top: 10px;">
+                <input type="hidden" name="project_id" value="{{ plan.project_id }}">
+                <input type="hidden" name="requirement_id" value="{{ plan.requirement_id or '' }}">
+                <input type="hidden" name="test_case_id" value="{{ item.test_case.id }}">
+                <input type="hidden" name="test_plan_case_id" value="{{ item.id }}">
+                <input type="hidden" name="title" value="执行失败：{{ item.test_case.title }}">
+                <input type="hidden" name="severity" value="{% if item.test_case.priority == 'P0' %}critical{% else %}major{% endif %}">
+                <input type="hidden" name="priority" value="{{ item.test_case.priority or 'P2' }}">
+                <input type="hidden" name="steps_to_reproduce" value="{{ item.test_case.steps if item.test_case else '' }}">
+                <input type="hidden" name="expected_result" value="{{ item.expected_result_snapshot or (item.test_case.expected if item.test_case else '') }}">
+                <input type="hidden" name="actual_result" value="{{ item.actual_result or item.result_comment or '' }}">
+                <button class="btn btn-secondary" type="submit">转缺陷</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">该计划下还没有测试用例。</p>
+    {% endif %}
+</div>
+{% endblock %}

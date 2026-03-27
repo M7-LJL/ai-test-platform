@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}缺陷详情{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>缺陷 #{{ defect.id }}</h1>
+    <p class="muted">所属项目：{{ defect.project.name if defect.project else "-" }}</p>
+    <div class="page-actions">
+        <a class="btn btn-secondary" href="/defects">返回缺陷中心</a>
+        {% if defect.requirement_id %}
+        <a class="btn btn-secondary" href="/requirements/{{ defect.requirement_id }}">查看关联需求</a>
+        {% endif %}
+        {% if defect.test_case_id %}
+        <a class="btn btn-secondary" href="/testcases/{{ defect.test_case_id }}/edit">查看关联用例</a>
+        {% endif %}
+        {% if defect.test_plan_case_id and defect.test_plan_case and defect.test_plan_case.plan %}
+        <a class="btn btn-secondary" href="/plans/{{ defect.test_plan_case.plan_id }}">返回测试计划</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <form method="post" action="/defects/{{ defect.id }}/update">
+        <label>标题</label>
+        <input type="text" name="title" value="{{ defect.title }}" required>
+
+        <div class="panel-grid">
+            <div>
+                <label>严重程度</label>
+                <select name="severity">
+                    {% for item in ["critical", "major", "minor"] %}
+                    <option value="{{ item }}" {% if defect.severity == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>优先级</label>
+                <select name="priority">
+                    {% for item in ["P0", "P1", "P2"] %}
+                    <option value="{{ item }}" {% if defect.priority == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>状态</label>
+                <select name="status">
+                    {% for item in ["open", "processing", "resolved", "closed"] %}
+                    <option value="{{ item }}" {% if defect.status == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <label>复现步骤</label>
+        <textarea name="steps_to_reproduce" rows="6">{{ defect.steps_to_reproduce or "" }}</textarea>
+
+        <label>预期结果</label>
+        <textarea name="expected_result" rows="4">{{ defect.expected_result or "" }}</textarea>
+
+        <label>实际结果</label>
+        <textarea name="actual_result" rows="4">{{ defect.actual_result or "" }}</textarea>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">保存缺陷</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>关联信息</h2>
+    <ul class="dense-list">
+        <li>项目：{{ defect.project.name if defect.project else "-" }}</li>
+        <li>
+            需求：
+            {% if defect.requirement_id %}
+            <a href="/requirements/{{ defect.requirement_id }}">{{ defect.requirement.title if defect.requirement else defect.requirement_id }}</a>
+            {% else %}
+            -
+            {% endif %}
+        </li>
+        <li>
+            用例：
+            {% if defect.test_case_id %}
+            <a href="/testcases/{{ defect.test_case_id }}/edit">{{ defect.test_case.title if defect.test_case else defect.test_case_id }}</a>
+            {% else %}
+            -
+            {% endif %}
+        </li>
+        <li>
+            执行记录：
+            {% if defect.test_plan_case_id %}
+            来自计划执行项 #{{ defect.test_plan_case_id }}
+            {% else %}
+            -
+            {% endif %}
+        </li>
+    </ul>
+</div>
+
+{% if defect.test_plan_case %}
+<div class="card">
+    <h2>执行上下文</h2>
+    <div class="panel-grid">
+        <div class="info-panel">
+            <h3>执行结果</h3>
+            <p class="muted">状态：{{ defect.test_plan_case.run_status }}</p>
+            <p class="muted">执行人：{{ defect.test_plan_case.executed_by or "-" }}</p>
+            <p class="muted">
+                执行时间：
+                {% if defect.test_plan_case.executed_at %}
+                {{ defect.test_plan_case.executed_at.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                -
+                {% endif %}
+            </p>
+        </div>
+        <div class="info-panel">
+            <h3>环境信息</h3>
+            <div class="cell-subtext" style="margin-top: 0; white-space: pre-wrap;">{{ defect.test_plan_case.environment_info or "-" }}</div>
+        </div>
+    </div>
+    <div class="panel-grid" style="margin-top: 16px;">
+        <div class="info-panel">
+            <h3>预期结果快照</h3>
+            <div class="cell-subtext" style="margin-top: 0; white-space: pre-wrap;">{{ defect.test_plan_case.expected_result_snapshot or "-" }}</div>
+        </div>
+        <div class="info-panel">
+            <h3>执行备注</h3>
+            <div class="cell-subtext" style="margin-top: 0; white-space: pre-wrap;">{{ defect.test_plan_case.result_comment or "-" }}</div>
+        </div>
+    </div>
+    {% if defect.test_plan_case.attachments %}
+    <div class="info-panel" style="margin-top: 16px;">
+        <h3>附件链接</h3>
+        <ul class="dense-list">
+            {% for item in defect.test_plan_case.attachments %}
+            <li><a href="{{ item }}" target="_blank" rel="noopener noreferrer">{{ item }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

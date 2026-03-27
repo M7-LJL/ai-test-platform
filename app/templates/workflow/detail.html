@@ -179,9 +179,21 @@
                 {% if workflow.status == 'draft' %}草稿
                 {% elif workflow.status == 'in_progress' %}进行中
                 {% elif workflow.status == 'completed' %}已完成
+                {% elif workflow.status == 'failed' %}失败
                 {% endif %}
             </span>
+            <span>当前阶段：{{ stage_labels.get(workflow.current_stage, workflow.current_stage) }}</span>
+            <span>已确认阶段：{{ stage_labels.get(workflow.confirmed_stage, workflow.confirmed_stage) if workflow.confirmed_stage else '未确认' }}</span>
             <span>创建于 {{ workflow.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% if workflow.started_at %}
+            <span>开始于 {{ workflow.started_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% endif %}
+            {% if workflow.updated_at %}
+            <span>更新于 {{ workflow.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% endif %}
+            {% if workflow.completed_at %}
+            <span>完成于 {{ workflow.completed_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% endif %}
         </div>
     </div>
     <div style="display: flex; gap: 10px;">
@@ -225,14 +237,104 @@
                 {% else %}
                 <span class="tag">待处理</span>
                 {% endif %}
+                {% if workflow.confirmed_stage == current_stage.stage_type %}
+                <span class="tag" style="background: #dbeafe; color: #1d4ed8;">已确认</span>
+                {% endif %}
             </h2>
+
+            <p class="muted" style="margin: -8px 0 16px;">
+                {% if current_stage.stage_type == 'outline' %}
+                根据原始需求抽取测试范围、模块结构和重点测试方向。
+                {% elif current_stage.stage_type == 'analysis' %}
+                从角色、流程、规则、数据、边界和异常等维度拆解测试点。
+                {% elif current_stage.stage_type == 'plan' %}
+                形成测试策略、范围边界、优先级、资源分工和风险安排。
+                {% elif current_stage.stage_type == 'cases' %}
+                将测试点沉淀为可执行、可验证、可维护的结构化测试用例。
+                {% elif current_stage.stage_type == 'prepare' %}
+                整理环境、账号、数据、依赖、工具和执行前置条件。
+                {% elif current_stage.stage_type == 'execute' %}
+                记录执行范围、执行结果、失败项、阻塞项和后续动作。
+                {% elif current_stage.stage_type == 'defects' %}
+                归纳测试发现的问题，整理为规范化缺陷草稿。
+                {% elif current_stage.stage_type == 'report' %}
+                汇总执行结果、缺陷分布、风险与结论，输出测试报告。
+                {% endif %}
+            </p>
+
+            <form method="POST" action="/workflow/{{ workflow.id }}/meta" style="margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: 1fr 180px 180px; gap: 12px;">
+                    <div>
+                        <label for="output_base_path">输出目录</label>
+                        <input
+                            id="output_base_path"
+                            name="output_base_path"
+                            type="text"
+                            value="{{ workflow.output_base_path or '' }}"
+                            placeholder="例如：D:\cursor\测试\碰一碰查寝"
+                        >
+                    </div>
+                    <div>
+                        <label for="workflow_version">工作流版本</label>
+                        <input
+                            id="workflow_version"
+                            name="workflow_version"
+                            type="text"
+                            value="{{ workflow.workflow_version or 'v1' }}"
+                            placeholder="v1"
+                        >
+                    </div>
+                    <div>
+                        <label for="source_type">来源类型</label>
+                        <input
+                            id="source_type"
+                            name="source_type"
+                            type="text"
+                            value="{{ workflow.source_type or '' }}"
+                            placeholder="requirement"
+                        >
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <label for="source_meta">来源元数据 JSON</label>
+                    <textarea
+                        id="source_meta"
+                        name="source_meta"
+                        rows="4"
+                        style="font-family: monospace; font-size: 13px;"
+                        placeholder='{"requirement_id": 1}'
+                    >{{ workflow.source_meta | tojson(indent=2) if workflow.source_meta else '' }}</textarea>
+                </div>
+
+                <div class="wf-actions">
+                    <button type="submit" class="btn btn-secondary">保存工作流配置</button>
+                </div>
+            </form>
+
+            <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;">
+                {% if can_use_llm %}
+                <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin: 0;">
+                    <input type="checkbox" id="wf-use-llm-standalone" checked style="width: auto; margin-top: 4px;">
+                    <span>
+                        <strong>工作流使用大模型生成</strong>
+                        <span style="display: block; font-size: 13px; color: #6b7280; margin-top: 4px;">取消勾选后，「生成」仅写入规则占位模板（不调用 API）。</span>
+                    </span>
+                </label>
+                {% else %}
+                <p style="margin: 0; font-size: 13px; color: #6b7280;">未配置 LLM，「生成」仅写入占位模板。若需 AI 生成，请在 .env 中配置 <code>LLM_API_KEY</code>。</p>
+                {% endif %}
+            </div>
 
             <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/save">
                 <label for="input_content">输入内容
                     <span style="font-weight: 400; color: #6b7280; font-size: 13px;">
                         {% if current_stage.stage_type == 'outline' %}（粘贴 PRD / 需求文档）
                         {% elif current_stage.stage_type == 'analysis' %}（上一阶段的测试大纲会自动填入）
+                        {% elif current_stage.stage_type == 'plan' %}（基于需求分析，整理测试策略、范围与风险）
                         {% elif current_stage.stage_type == 'cases' %}（需求分析结果会自动填入）
+                        {% elif current_stage.stage_type == 'prepare' %}（基于测试计划和用例，整理环境、账号、数据与依赖）
+                        {% elif current_stage.stage_type == 'execute' %}（记录执行范围、执行结果、失败项和阻塞项）
                         {% elif current_stage.stage_type == 'defects' %}（粘贴测试执行结果 / 失败日志）
                         {% elif current_stage.stage_type == 'report' %}（粘贴执行统计和缺陷数据）
                         {% endif %}
@@ -281,16 +383,23 @@
                 {% endif %}
 
                 <div class="wf-actions" style="margin-top: 16px;">
-                    {% if can_use_llm %}
                     <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/generate"
                           id="generate-form">
-                        <button type="submit" class="btn" id="generate-btn"
-                            onclick="document.getElementById('ai-loading').classList.add('show'); this.disabled=true; this.textContent='生成中...';">
-                            {% if current_stage.output_content %}重新生成{% else %}AI 生成{{ stage_labels[current_stage.stage_type] }}{% endif %}
+                        <input type="hidden" name="use_llm" value="{% if can_use_llm %}true{% else %}false{% endif %}" id="wf-use-llm-field-standalone">
+                        <button type="submit" class="btn" id="generate-btn">
+                            {% if current_stage.output_content %}
+                                {% if can_use_llm %}重新生成{% else %}重新生成占位{% endif %}
+                            {% else %}
+                                {% if can_use_llm %}AI 生成{{ stage_labels[current_stage.stage_type] }}{% else %}生成占位 — {{ stage_labels[current_stage.stage_type] }}{% endif %}
+                            {% endif %}
                         </button>
                     </form>
-                    {% else %}
-                    <span style="color: #ef4444; font-size: 13px;">LLM 未配置，请在 .env 中设置 LLM_API_KEY</span>
+                    {% if current_stage.output_content %}
+                    <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ current_stage.stage_type }}/confirm">
+                        <button type="submit" class="btn btn-secondary">
+                            {% if workflow.confirmed_stage == current_stage.stage_type %}已确认当前阶段{% else %}确认当前阶段{% endif %}
+                        </button>
+                    </form>
                     {% endif %}
                 </div>
             </div>
@@ -298,14 +407,48 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    function renderMarkdown(text) {
+        if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+            return marked.parse(text || '');
+        }
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+    }
+
     var raw = document.getElementById('output_content');
     var preview = document.getElementById('md-preview');
     if (raw && preview) {
-        preview.innerHTML = marked.parse(raw.value);
+        preview.innerHTML = renderMarkdown(raw.value);
         preview.querySelectorAll('input[type="checkbox"]').forEach(function(cb) { cb.disabled = true; });
+    }
+    var cb = document.getElementById('wf-use-llm-standalone');
+    var hidden = document.getElementById('wf-use-llm-field-standalone');
+    if (cb && hidden) {
+        function sync() { hidden.value = cb.checked ? 'true' : 'false'; }
+        cb.addEventListener('change', sync);
+        sync();
+    }
+
+    var generateForm = document.getElementById('generate-form');
+    if (generateForm) {
+        generateForm.addEventListener('submit', function() {
+            var loading = document.getElementById('ai-loading');
+            var button = document.getElementById('generate-btn');
+            if (!button || button.disabled) return;
+            window.setTimeout(function() {
+                if (loading) {
+                    loading.classList.add('show');
+                }
+                button.disabled = true;
+                button.textContent = '生成中...';
+            }, 0);
+        });
     }
 });
 function toggleView(mode) {

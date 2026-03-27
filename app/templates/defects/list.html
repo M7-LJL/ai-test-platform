@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}缺陷中心{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>缺陷中心</h1>
+    <p class="muted">查看和跟踪结构化缺陷记录。</p>
+</div>
+
+<div class="card">
+    <h2>怎么用这页</h2>
+    <div class="panel-grid">
+        <div class="info-panel">
+            <h3>这页做什么</h3>
+            <ul class="dense-list">
+                <li>集中查看当前项目下的缺陷记录</li>
+                <li>按需求、严重程度、状态筛选问题</li>
+                <li>把缺陷和需求、用例关联起来追踪</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>推荐起手动作</h3>
+            <ul class="dense-list">
+                <li>先用筛选缩小到当前项目或需求范围</li>
+                <li>点击缺陷详情查看复现步骤和处理状态</li>
+                <li>后续可把失败执行项沉淀为正式缺陷</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>适合什么时候来</h3>
+            <ul class="dense-list">
+                <li>执行过程中发现问题后</li>
+                <li>想看某条需求当前问题分布时</li>
+                <li>需要跟踪问题是否已关闭时</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/defects">
+        <div class="panel-grid">
+            <div>
+                <label>项目</label>
+                <select name="project_id">
+                    <option value="">全部项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>
+                        {{ project.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>需求</label>
+                <select name="requirement_id">
+                    <option value="">全部需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>
+                        {{ requirement.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>  
+            <div>
+                <label>严重程度</label>
+                <select name="severity">
+                    <option value="">全部</option>
+                    {% for item in ["critical", "major", "minor"] %}
+                    <option value="{{ item }}" {% if selected_severity == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    {% for item in ["open", "processing", "resolved", "closed"] %}
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="page-actions">
+            <button class="btn" type="submit">筛选</button>
+            <a class="btn btn-secondary" href="/defects">重置</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>缺陷列表</h2>
+    {% if defects %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>标题</th>
+                    <th>项目</th>
+                    <th>严重程度</th>
+                    <th>优先级</th>
+                    <th>状态</th>
+                    <th>关联需求</th>
+                    <th>关联用例</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for defect in defects %}
+                <tr>
+                    <td>{{ defect.id }}</td>
+                    <td>{{ defect.title }}</td>
+                    <td>{{ defect.project.name if defect.project else "-" }}</td>
+                    <td>{{ defect.severity }}</td>
+                    <td>{{ defect.priority }}</td>
+                    <td>{{ defect.status }}</td>
+                    <td>
+                        {% if defect.requirement_id %}
+                        <a href="/requirements/{{ defect.requirement_id }}">{{ defect.requirement.title if defect.requirement else defect.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if defect.test_case_id %}
+                        <a href="/testcases/{{ defect.test_case_id }}/edit">{{ defect.test_case.title if defect.test_case else defect.test_case_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-secondary" href="/defects/{{ defect.id }}">查看详情</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前还没有缺陷记录。</p>
+    {% endif %}
+</div>
+{% endblock %}

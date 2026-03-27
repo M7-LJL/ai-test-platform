@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+
 from pathlib import Path
 from typing import Any
-
+from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -300,6 +300,41 @@ def _normalized_test_point_rows(payload: dict[str, Any]) -> list[dict[str, str]]
     return normalized_rows
 
 
+def _build_practical_analysis_modules(requirement: Requirement) -> list[dict[str, Any]]:
+    payload = _analysis_payload_dict(requirement)
+    rows = _normalized_test_point_rows(payload)
+    if not rows:
+        return []
+
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        module_name = row["module"] or "默认模块"
+        grouped.setdefault(module_name, [])
+        grouped[module_name].append(row)
+
+    modules: list[dict[str, Any]] = []
+    for module_name, module_rows in grouped.items():
+        modules.append(
+            {
+                "module": module_name,
+                "rows": module_rows[:10],
+                "categories": " / ".join(
+                    list(dict.fromkeys(row["category"] for row in module_rows if row["category"]))
+                ) or "功能点",
+                "sources": "；".join(
+                    list(dict.fromkeys(row["source_refs"] for row in module_rows if row["source_refs"]))
+                ),
+            }
+        )
+    return modules
+
+
+def _build_practical_pending_items(requirement: Requirement) -> list[dict[str, str]]:
+    payload = _analysis_payload_dict(requirement)
+    sections = _build_special_issue_sections(payload)
+    return sections["general_gaps"][:8]
+
+
 def _normalized_gap_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
     rows = payload.get("gaps", [])
     if not isinstance(rows, list):
@@ -540,6 +575,18 @@ def _normalized_custom_points(requirement: Requirement) -> list[str]:
     return _normalized_string_list(review.get("custom_points"))
 
 
+def _merged_review_notes(requirement: Requirement) -> str:
+    parts: list[str] = []
+    for line in _normalized_custom_points(requirement):
+        parts.append(line)
+    if requirement.review_notes:
+        for line in requirement.review_notes.strip().splitlines():
+            stripped = line.strip()
+            if stripped and stripped not in parts:
+                parts.append(stripped)
+    return "\n".join(parts)
+
+
 def _normalized_core_regression_points(requirement: Requirement) -> list[str]:
     stored = _normalized_string_list(requirement.core_regression_points)
     if stored:
@@ -666,6 +713,60 @@ def new_requirement_page(
         ),
     )
 
+def _build_workflow_source_info(
+    *,
+    uploaded_filename: str,
+    persisted_filename: str,
+    uploaded_content_type: str,
+    uploaded_content_bytes: int,
+    source_url: str,
+    pasted_content: str,
+    final_content: str,
+) -> tuple[str, dict[str, Any]]:
+    has_file_source = bool(uploaded_filename or persisted_filename)
+    has_url_source = bool(source_url)
+    has_text_source = bool(pasted_content)
+
+    if has_file_source:
+        workflow_source_type = "file_upload"
+    elif has_url_source:
+        workflow_source_type = "url_import"
+    elif has_text_source:
+        workflow_source_type = "text_input"
+    else:
+        workflow_source_type = "requirement_create"
+
+    workflow_source_meta = {
+        "created_from": "requirements.create",
+        "source_kind": workflow_source_type,
+        "source_url": source_url or None,
+        "source_filename": uploaded_filename or persisted_filename or None,
+        "source_content_type": uploaded_content_type or None,
+        "source_content_bytes": uploaded_content_bytes or None,
+        "content_length": len(final_content.strip()),
+        "content_preview": final_content.strip()[:200],
+    }
+    return workflow_source_type, workflow_source_meta
+
+
+def _ensure_workflow_stages(db: Session, workflow: TestWorkflow) -> None:
+    existing = {stage.stage_type for stage in workflow.stages}
+    created = False
+    for stage_type in STAGE_TYPES:
+        if stage_type not in existing:
+            db.add(
+                WorkflowStage(
+                    workflow_id=workflow.id,
+                    stage_type=stage_type,
+                    sort_order=STAGE_ORDER[stage_type],
+                )
+            )
+            created = True
+    if created:
+        db.commit()
+        db.refresh(workflow)
+
+
 
 @router.post("/requirements/", name="requirement_create")
 async def create_requirement(
@@ -675,6 +776,7 @@ async def create_requirement(
     markdown_filename_text: str = Form(default=""),
     markdown_content_text: str = Form(default=""),
     fallback_content: str = Form(default=""),
+    source_url: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     projects = db.query(Project).order_by(Project.created_at.desc()).all()
@@ -684,14 +786,19 @@ async def create_requirement(
 
     uploaded_filename = ""
     uploaded_content = ""
+    uploaded_content_bytes = 0
+    uploaded_content_type = ""
     if markdown_file is not None and markdown_file.filename:
         uploaded_filename = markdown_file.filename.strip()
+        uploaded_content_type = (markdown_file.content_type or "").strip()
         raw_bytes = await markdown_file.read()
+        uploaded_content_bytes = len(raw_bytes)
         uploaded_content = _decode_markdown_bytes(raw_bytes)
 
     persisted_filename = (markdown_filename_text or "").strip()
     persisted_content = (markdown_content_text or "").strip()
     pasted_content = (fallback_content or "").strip()
+    source_url = (source_url or "").strip()
 
     final_filename = uploaded_filename or persisted_filename
     final_content = uploaded_content or persisted_content or pasted_content
@@ -710,27 +817,31 @@ async def create_requirement(
                     "markdown_filename_text": final_filename,
                     "markdown_content_text": persisted_content,
                     "fallback_content": pasted_content,
+                    "source_url": source_url,
                 },
             ),
             status_code=400,
         )
 
     title = _extract_title_from_markdown(final_filename, final_content)
-    analysis_payload = build_requirement_analysis(final_content, title=title, use_llm=can_use_llm())
-    parsed_points = [
-        point["title"]
-        for point in analysis_payload.get("selected_points", [])
-        if isinstance(point, dict) and point.get("title")
-    ]
+    now = datetime.utcnow()
+    workflow_source_type, workflow_source_meta = _build_workflow_source_info(
+        uploaded_filename=uploaded_filename,
+        persisted_filename=persisted_filename,
+        uploaded_content_type=uploaded_content_type,
+        uploaded_content_bytes=uploaded_content_bytes,
+        source_url=source_url,
+        pasted_content=pasted_content,
+        final_content=final_content,
+    )
 
     requirement = Requirement(
         project_id=project_id,
         title=title.strip(),
         content=final_content.strip(),
-        parsed_points=parsed_points,
-        analysis_payload=analysis_payload,
+        parsed_points=[],
+        analysis_payload={},
         analysis_status="draft",
-        last_analyzed_at=datetime.utcnow(),
     )
     db.add(requirement)
     db.flush()
@@ -741,6 +852,18 @@ async def create_requirement(
         name=title.strip(),
         status="in_progress",
         current_stage="outline",
+        output_base_path=None,
+        confirmed_stage=None,
+        started_at=now,
+        updated_at=now,
+        completed_at=None,
+        workflow_version="v1",
+        source_type=workflow_source_type,
+        source_meta={
+            **workflow_source_meta,
+            "requirement_id": requirement.id,
+            "requirement_title": requirement.title,
+        },
     )
     db.add(wf)
     db.flush()
@@ -757,7 +880,6 @@ async def create_requirement(
 
     db.commit()
     return RedirectResponse(url=f"/requirements/{requirement.id}", status_code=303)
-
 
 @router.post("/requirements/{requirement_id}/reanalyze", name="requirement_reanalyze")
 def reanalyze_requirement(
@@ -854,6 +976,7 @@ def requirement_detail(
     wf_stages: dict[str, WorkflowStage] = {}
     wf_stage_list: list[WorkflowStage] = []
     if wf:
+        _ensure_workflow_stages(db, wf)
         wf_stages = {s.stage_type: s for s in wf.stages}
         wf_stage_list = sorted(wf.stages, key=lambda s: STAGE_ORDER.get(s.stage_type, 99))
 
@@ -892,8 +1015,10 @@ def requirement_detail(
             "coverage_sections": _build_coverage_sections(requirement),
             "consistency_sections": _build_consistency_sections(requirement),
             "quality_summary": _build_quality_summary(requirement),
+            "practical_analysis_modules": _build_practical_analysis_modules(requirement),
+            "practical_pending_items": _build_practical_pending_items(requirement),
             "review_point_rows": _build_review_point_rows(requirement),
-            "custom_points": _normalized_custom_points(requirement),
+            "review_notes_merged": _merged_review_notes(requirement),
             "core_regression_points": _normalized_core_regression_points(requirement),
             "tool_plan": list(requirement.tool_plan or []),
             "tool_result": list(requirement.tool_result or []),
@@ -906,7 +1031,6 @@ def review_requirement(
     requirement_id: int,
     review_points_payload: str = Form(default="[]"),
     deleted_point_ids: str = Form(default=""),
-    custom_points: str = Form(default=""),
     review_notes: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
@@ -1020,10 +1144,10 @@ def review_requirement(
         if point_id in deleted_ids or point_id not in kept_ids:
             db.delete(point)
 
-    custom_point_lines = _normalized_string_list(custom_points.splitlines())
+    notes_lines = _normalized_string_list(review_notes.strip().splitlines())
     analysis_payload = dict(_analysis_payload_dict(requirement))
     review = analysis_payload.get("review") if isinstance(analysis_payload.get("review"), dict) else {}
-    review["custom_points"] = custom_point_lines
+    review["custom_points"] = notes_lines
     review["core_regression_points"] = core_regression_points
     review["reviewed_test_points"] = reviewed_test_points
     analysis_payload["review"] = review
@@ -1043,21 +1167,119 @@ def review_requirement(
     )
     db.commit()
 
-    return RedirectResponse(url=f"/requirements/{requirement_id}?reviewed=1", status_code=303)
+    return RedirectResponse(url=f"/requirements/{requirement_id}?reviewed=1#review-form", status_code=303)
 
 
-@router.post("/requirements/{requirement_id}/tool-plan", name="requirement_tool_plan")
-def create_requirement_tool_plan(requirement_id: int, db: Session = Depends(get_db)):
-    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
-    if requirement is None:
-        raise HTTPException(status_code=404, detail="Requirement not found.")
 
-    requirement.tool_plan = _build_tool_plan(requirement)
-    _append_tool_result(
-        requirement,
-        "工具规划",
-        f"已生成 {len(requirement.tool_plan or [])} 条测试工具与执行策略建议。",
+@router.post("/requirements/", name="requirement_create")
+async def create_requirement(
+    request: Request,
+    project_id: int = Form(...),
+    markdown_file: UploadFile | None = File(default=None),
+    markdown_filename_text: str = Form(default=""),
+    markdown_content_text: str = Form(default=""),
+    fallback_content: str = Form(default=""),
+    source_url: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    uploaded_filename = ""
+    uploaded_content = ""
+    uploaded_content_bytes = 0
+    uploaded_content_type = ""
+    if markdown_file is not None and markdown_file.filename:
+        uploaded_filename = markdown_file.filename.strip()
+        uploaded_content_type = (markdown_file.content_type or "").strip()
+        raw_bytes = await markdown_file.read()
+        uploaded_content_bytes = len(raw_bytes)
+        uploaded_content = _decode_markdown_bytes(raw_bytes)
+
+    persisted_filename = (markdown_filename_text or "").strip()
+    persisted_content = (markdown_content_text or "").strip()
+    pasted_content = (fallback_content or "").strip()
+    source_url = (source_url or "").strip()
+
+    final_filename = uploaded_filename or persisted_filename
+    final_content = uploaded_content or persisted_content or pasted_content
+
+    if not final_content:
+        return templates.TemplateResponse(
+            request,
+            "requirements/new.html",
+            _new_requirement_context(
+                request,
+                projects,
+                selected_project_id=project_id,
+                error_message="请上传 Markdown 文件，或直接粘贴需求正文。",
+                form_data={
+                    "project_id": str(project_id),
+                    "markdown_filename_text": final_filename,
+                    "markdown_content_text": persisted_content,
+                    "fallback_content": pasted_content,
+                    "source_url": source_url,
+                },
+            ),
+            status_code=400,
+        )
+
+    title = _extract_title_from_markdown(final_filename, final_content)
+    now = datetime.utcnow()
+    workflow_source_type, workflow_source_meta = _build_workflow_source_info(
+        uploaded_filename=uploaded_filename,
+        persisted_filename=persisted_filename,
+        uploaded_content_type=uploaded_content_type,
+        uploaded_content_bytes=uploaded_content_bytes,
+        source_url=source_url,
+        pasted_content=pasted_content,
+        final_content=final_content,
     )
-    db.commit()
 
-    return RedirectResponse(url=f"/requirements/{requirement_id}?tool_planned=1", status_code=303)
+    requirement = Requirement(
+        project_id=project_id,
+        title=title.strip(),
+        content=final_content.strip(),
+        parsed_points=[],
+        analysis_payload={},
+        analysis_status="draft",
+    )
+    db.add(requirement)
+    db.flush()
+
+    wf = TestWorkflow(
+        project_id=project_id,
+        requirement_id=requirement.id,
+        name=title.strip(),
+        status="in_progress",
+        current_stage="outline",
+        output_base_path=None,
+        confirmed_stage=None,
+        started_at=now,
+        updated_at=now,
+        completed_at=None,
+        workflow_version="v1",
+        source_type=workflow_source_type,
+        source_meta={
+            **workflow_source_meta,
+            "requirement_id": requirement.id,
+            "requirement_title": requirement.title,
+        },
+    )
+    db.add(wf)
+    db.flush()
+
+    for stage_type in STAGE_TYPES:
+        stage = WorkflowStage(
+            workflow_id=wf.id,
+            stage_type=stage_type,
+            sort_order=STAGE_ORDER[stage_type],
+        )
+        if stage_type == "outline":
+            stage.input_content = final_content.strip()
+        db.add(stage)
+
+    db.commit()
+    return RedirectResponse(url=f"/requirements/{requirement.id}", status_code=303)

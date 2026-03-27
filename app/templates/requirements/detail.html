@@ -1,80 +1,391 @@
 {% extends "base.html" %}
 
 {% block title %}需求详情{% endblock %}
+{% block page_title %}需求工作台{% endblock %}
+{% block page_subtitle %}围绕当前需求推进分析、确认、用例沉淀和后续执行。{% endblock %}
+
+{% block extra_head %}
+<style>
+    .req-hero {
+        padding: 26px;
+    }
+    .req-hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+        gap: 20px;
+        align-items: start;
+    }
+    .req-hero-title {
+        margin-bottom: 10px;
+        font-size: 22px;
+        line-height: 1.3;
+    }
+    .req-meta-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .req-meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .req-feedback-stack {
+        display: grid;
+        gap: 10px;
+        margin: 16px 0;
+    }
+    .req-feedback {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .req-feedback.is-success {
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+    .req-feedback.is-info {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+    .req-feedback.is-warning {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #b45309;
+    }
+    .req-feedback.is-danger {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #b91c1c;
+    }
+    .req-action-section + .req-action-section {
+        margin-top: 14px;
+    }
+    .req-action-label {
+        margin-bottom: 8px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .req-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+    }
+    .req-inline-form {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .req-inline-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .req-inline-checkbox input {
+        width: auto;
+        margin: 0;
+    }
+    .req-side-panel {
+        display: grid;
+        gap: 14px;
+    }
+    .req-next-card {
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid #bfdbfe;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+    }
+    .req-next-step-label {
+        color: #2563eb;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .req-next-title {
+        margin: 8px 0 6px;
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1.3;
+    }
+    .req-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .req-summary-item {
+        padding: 16px;
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+    }
+    .req-summary-item .metric-value {
+        font-size: 24px;
+    }
+    .req-flow-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+    }
+    .req-flow-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .req-flow-chip.is-current {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .req-flow-chip.is-done {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .req-workflow-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin: 16px 0 20px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+    .req-workflow-summary-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .req-workflow-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    @media (max-width: 980px) {
+        .req-hero-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    @media (max-width: 640px) {
+        .req-summary-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="card">
-    <h1>{{ requirement.title }}</h1>
-    <p class="muted">所属项目：{{ requirement.project.name }}</p>
-    <p class="muted">创建时间：{{ requirement.created_at }}</p>
-    <p class="muted">当前状态：{{ requirement.analysis_status or "draft" }}</p>
+{% set outline_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'outline') | list | first if workflow else none %}
+{% set analysis_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'analysis') | list | first if workflow else none %}
+{% set plan_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'plan') | list | first if workflow else none %}
+{% set cases_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'cases') | list | first if workflow else none %}
+{% set prepare_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'prepare') | list | first if workflow else none %}
+{% set execute_stage = wf_stage_list | selectattr('stage_type', 'equalto', 'execute') | list | first if workflow else none %}
+{% set review_ready = requirement.analysis_status in ["reviewed", "ready_for_execution"] %}
+{% set next_step = namespace(
+    number="2",
+    title="生成测试大纲",
+    note="先基于需求生成测试文档。",
+    href="#wf-stage-outline",
+    action="去生成测试大纲"
+) %}
+{% if not workflow %}
+    {% set next_step.number = "1" %}
+    {% set next_step.title = "等待创建工作流" %}
+    {% set next_step.note = "当前需求还没有关联工作流，暂时无法继续后续步骤。" %}
+    {% set next_step.href = "#ai-workflow" %}
+    {% set next_step.action = "查看工作流区域" %}
+{% elif not outline_stage or not outline_stage.output_content %}
+    {% set next_step.number = "2" %}
+    {% set next_step.title = "生成测试大纲" %}
+    {% set next_step.note = "先基于需求生成测试文档。" %}
+    {% set next_step.href = "#wf-stage-outline" %}
+    {% set next_step.action = "去生成测试大纲" %}
+{% elif not analysis_stage or not analysis_stage.output_content %}
+    {% set next_step.number = "3" %}
+    {% set next_step.title = "生成需求分析" %}
+    {% set next_step.note = "基于测试大纲，产出测试文档。" %}
+    {% set next_step.href = "#wf-stage-analysis" %}
+    {% set next_step.action = "去生成需求分析" %}
+{% elif not review_ready %}
+    {% set next_step.number = "4" %}
+    {% set next_step.title = "人工确认测试点" %}
+    {% set next_step.note = "确认测试点口径后，再继续测试计划与后续阶段。" %}
+    {% set next_step.href = "#review-form" %}
+    {% set next_step.action = "去人工确认" %}
+{% elif not plan_stage or not plan_stage.output_content %}
+    {% set next_step.number = "5" %}
+    {% set next_step.title = "生成测试计划" %}
+    {% set next_step.note = "基于需求分析输出测试策略、范围、风险和阶段安排。" %}
+    {% set next_step.href = "#wf-stage-plan" %}
+    {% set next_step.action = "去生成测试计划" %}
+{% elif not cases_stage or not cases_stage.output_content %}
+    {% set next_step.number = "6" %}
+    {% set next_step.title = "生成测试用例" %}
+    {% set next_step.note = "基于已确认的测试点生成可维护的测试用例。" %}
+    {% set next_step.href = "#wf-stage-cases" %}
+    {% set next_step.action = "去生成测试用例" %}
+{% elif not prepare_stage or not prepare_stage.output_content %}
+    {% set next_step.number = "7" %}
+    {% set next_step.title = "整理测试准备" %}
+    {% set next_step.note = "补齐环境、账号、数据、依赖和执行前置条件。" %}
+    {% set next_step.href = "#wf-stage-prepare" %}
+    {% set next_step.action = "去整理测试准备" %}
+{% elif not execute_stage or not execute_stage.output_content %}
+    {% set next_step.number = "8" %}
+    {% set next_step.title = "记录测试执行" %}
+    {% set next_step.note = "整理执行范围、结果、阻塞项和后续动作。" %}
+    {% set next_step.href = "#wf-stage-execute" %}
+    {% set next_step.action = "去记录测试执行" %}
+{% else %}
+    {% set next_step.number = "9" %}
+    {% set next_step.title = "沉淀缺陷与测试报告" %}
+    {% set next_step.note = "执行记录已经准备好，下一步整理缺陷并输出测试报告。" %}
+    {% set next_step.href = "#wf-stage-defects" %}
+    {% set next_step.action = "去整理缺陷与报告" %}
+{% endif %}
 
-    {% if generated is not none %}
-    <p style="margin-top: 12px; color: #166534;">已成功生成 {{ generated }} 条用例草稿。</p>
-    {% endif %}
-    {% if imported is not none %}
-    <p style="margin-top: 12px; color: #166534;">已成功导入 {{ imported }} 条 Markdown 测试用例。</p>
-    {% endif %}
-    {% if reanalyzed is not none %}
-    <p style="margin-top: 12px; color: #1d4ed8;">已按最新规则重新完成 AI 分析。</p>
-    {% endif %}
-    {% if edited is not none %}
-    <p style="margin-top: 12px; color: #166534;">测试用例修改已保存。</p>
-    {% endif %}
-    {% if llm_unavailable is not none %}
-    <p style="margin-top: 12px; color: #b45309;">已勾选使用大模型，但当前未配置 `LLM_API_KEY` 或 `OPENAI_API_KEY`，本次已自动回退为规则分析。</p>
-    {% endif %}
-    {% if reviewed is not none %}
-    <p style="margin-top: 12px; color: #166534;">人工确认已保存。</p>
-    {% endif %}
-    {% if tool_planned is not none %}
-    <p style="margin-top: 12px; color: #166534;">测试工具与执行策略已更新。</p>
-    {% endif %}
-    {% if review_required is not none %}
-    <p style="margin-top: 12px; color: #b91c1c;">请先完成人工确认，再执行 AI 生成用例。</p>
-    {% endif %}
+<div class="card req-hero">
+    <div class="req-hero-grid">
+        <div>
+            <h1 class="req-hero-title">{{ requirement.title }}</h1>
+            <div class="req-meta-list">
+                <span class="req-meta-chip">所属项目：{{ requirement.project.name }}</span>
+                <span class="req-meta-chip">创建时间：{{ requirement.created_at }}</span>
+                <span class="req-meta-chip">当前状态：{{ requirement.analysis_status or "draft" }}</span>
+            </div>
 
-    <div class="page-actions">
-        <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" style="margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <button class="btn btn-secondary" type="submit">AI重新分析</button>
-            <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: #374151;">
-                <input type="checkbox" name="use_llm" value="true" style="width: auto; margin: 0;">
-                使用大模型（支持 DeepSeek / OpenAI）
-            </label>
-        </form>
-        
-        <a class="btn" href="/requirements/{{ requirement.id }}/xmind-markdown">导出 Xmind Markdown</a>
-        <a class="btn" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入 Markdown 用例</a>
-        <a class="btn btn-secondary" href="/projects/{{ requirement.project.id }}">返回项目详情</a>
-        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+            <div class="req-feedback-stack">
+                {% if generated is not none %}
+                <div class="req-feedback is-success">已成功生成 {{ generated }} 条用例草稿。</div>
+                {% endif %}
+                {% if imported is not none %}
+                <div class="req-feedback is-success">已成功导入 {{ imported }} 条 Markdown 测试用例。</div>
+                {% endif %}
+                {% if reanalyzed is not none %}
+                <div class="req-feedback is-info">已按最新规则重新完成 AI 分析。</div>
+                {% endif %}
+                {% if edited is not none %}
+                <div class="req-feedback is-success">测试用例修改已保存。</div>
+                {% endif %}
+                {% if llm_unavailable is not none %}
+                <div class="req-feedback is-warning">已勾选使用大模型，但当前未配置 `LLM_API_KEY` 或 `OPENAI_API_KEY`，本次已自动回退为规则分析。</div>
+                {% endif %}
+                {% if reviewed is not none %}
+                <div class="req-feedback is-success">人工确认已保存。</div>
+                {% endif %}
+                {% if tool_planned is not none %}
+                <div class="req-feedback is-success">测试工具与执行策略已更新。</div>
+                {% endif %}
+                {% if review_required is not none %}
+                <div class="req-feedback is-danger">请先完成人工确认，再继续测试计划和用例编写。</div>
+                {% endif %}
+            </div>
+
+            <div class="req-action-section">
+                <div class="req-action-label">当前主动作</div>
+                <div class="req-action-row">
+                    <a class="btn" href="{{ next_step.href }}">{{ next_step.action }}</a>
+                    <form method="post" action="/requirements/{{ requirement.id }}/reanalyze" class="req-inline-form">
+                        <button class="btn btn-secondary" type="submit">AI重新分析</button>
+                        <label class="req-inline-checkbox">
+                            <input type="checkbox" id="page-use-llm" name="use_llm" value="true">
+                            AI 模式（重分析和阶段生成都使用大模型）
+                        </label>
+                    </form>
+                </div>
+            </div>
+
+            <div class="req-action-section">
+                <div class="req-action-label">关联产出</div>
+                <div class="req-action-row">
+                    <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}/xmind-markdown">导出 Xmind Markdown</a>
+                    <a class="btn btn-secondary" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入 Markdown 用例</a>
+                    <a class="btn btn-secondary" href="/testcases?requirement_id={{ requirement.id }}">查看关联用例</a>
+                    <a class="btn btn-secondary" href="/plans?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看关联计划</a>
+                    <a class="btn btn-secondary" href="/defects?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看关联缺陷</a>
+                </div>
+            </div>
+
+            <div class="req-action-section">
+                <div class="req-action-label">页面跳转</div>
+                <div class="req-action-row">
+                    <a class="btn btn-secondary" href="/projects/{{ requirement.project.id }}">返回项目详情</a>
+                    <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+                </div>
+            </div>
+        </div>
+
+        <aside class="req-side-panel">
+            <div class="req-next-card">
+                <div class="req-next-step-label">当前推荐步骤 · 第 {{ next_step.number }} 步</div>
+                <div class="req-next-title">{{ next_step.title }}</div>
+                <p class="muted" style="margin: 0;">{{ next_step.note }}</p>
+                <div class="page-actions" style="margin-top: 14px;">
+                    <a class="btn" href="{{ next_step.href }}">{{ next_step.action }}</a>
+                </div>
+            </div>
+
+            <div class="req-summary-grid">
+                <a class="req-summary-item metric-card-link" href="#ai-workflow">
+                    <span class="metric-label">工作流进度</span>
+                    <strong class="metric-value">{% if workflow %}{{ wf_stage_list | selectattr('status', 'equalto', 'completed') | list | length }}/{{ wf_stage_list | length }}{% else %}0/0{% endif %}</strong>
+                    <span class="metric-note">已完成阶段数</span>
+                </a>
+                <a class="req-summary-item metric-card-link" href="#review-form">
+                    <span class="metric-label">人工确认状态</span>
+                    <strong class="metric-value">{% if review_ready %}已完成{% else %}待处理{% endif %}</strong>
+                    <span class="metric-note">{{ requirement.analysis_status or "draft" }}</span>
+                </a>
+                <a class="req-summary-item metric-card-link" href="/plans?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">
+                    <span class="metric-label">测试计划</span>
+                    <strong class="metric-value">进入</strong>
+                    <span class="metric-note">跳到执行中心</span>
+                </a>
+            </div>
+        </aside>
     </div>
 
-    <div class="metric-grid" style="margin-top: 20px;">
-        <a class="metric-card metric-card-link" href="#analysis-overview">
-            <span class="metric-label">质量评分</span>
-            <strong class="metric-value">{{ quality_summary.score }}</strong>
-            <span class="metric-note">{% if quality_summary.needs_review %}建议人工复核{% else %}可直接进入下一步{% endif %}</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#analysis-scope">
-            <span class="metric-label">测试范围</span>
-            <strong class="metric-value">{{ quality_summary.scope_count }}</strong>
-            <span class="metric-note">已识别功能范围项</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#analysis-test-points">
-            <span class="metric-label">测试点</span>
-            <strong class="metric-value">{{ quality_summary.test_point_count }}</strong>
-            <span class="metric-note">含真实用户场景补充</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#analysis-gaps">
-            <span class="metric-label">待确认问题</span>
-            <strong class="metric-value">{{ quality_summary.gap_count }}</strong>
-            <span class="metric-note">建议进入评审清单</span>
-        </a>
-    </div>
 </div>
 
 <div class="card">
-    <h2>1. 输入需求</h2>
+    <h2>需求原文</h2>
     <p class="muted">支持 PRD、页面描述、流程说明等原始需求输入。</p>
     <div class="requirement-content-panel is-collapsed" id="requirement-content-panel">
         <pre class="requirement-content-text">{{ requirement.content }}</pre>
@@ -91,442 +402,214 @@
     </div>
 </div>
 
-<div class="card" id="analysis-overview">
-    <h2>2. AI需求分析总览</h2>
-    <p class="muted">按照测试需求分析技能输出测试范围、测试点、疑义与追溯，并执行功能点穷尽和理解一致性自检。</p>
+{% if workflow %}
+<div class="card" id="ai-workflow">
+    <h2>工作流阶段</h2>
+    <p class="muted">这里只保留可执行的阶段操作，具体阶段说明以当前展开内容为准。</p>
 
-    <div class="metric-grid" style="margin-top: 16px;">
-        <a class="metric-card metric-card-link" href="#analysis-terms">
-            <span class="metric-label">术语与缩写</span>
-            <strong class="metric-value">{{ quality_summary.term_count }}</strong>
-            <span class="metric-note">辅助统一口径</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#analysis-traceability">
-            <span class="metric-label">缺失来源</span>
-            <strong class="metric-value">{{ quality_summary.missing_source_count }}</strong>
-            <span class="metric-note">越少越好</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#analysis-generic-points">
-            <span class="metric-label">空洞表述</span>
-            <strong class="metric-value">{{ quality_summary.generic_statement_count }}</strong>
-            <span class="metric-note">需重点清理</span>
-        </a>
-        <a class="metric-card metric-card-link" href="#generated-testcases">
-            <span class="metric-label">预计候选用例</span>
-            <strong class="metric-value">{{ estimated_case_count }}</strong>
-            <span class="metric-note">后续生成会去重</span>
-        </a>
+    <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;">
+        {% if can_use_llm_flag %}
+        <p class="muted" style="margin: 0; font-size: 13px;">
+            当前页面所有「AI重新分析」和阶段「生成」动作，都继承上方的 <strong>AI 模式</strong> 开关。
+            关闭后，各阶段仅写入规则占位模板，不调用大模型。
+        </p>
+        {% else %}
+        <p class="muted" style="margin: 0; font-size: 13px;">未配置 LLM 时，「生成」仅写入占位模板（不调用大模型）。若需 AI 生成，请在 .env 中配置 <code>LLM_API_KEY</code>。</p>
+        {% endif %}
     </div>
 
-    <div class="panel-grid" style="margin-top: 16px;">
-        {% for section in analysis_sections %}
-        <div class="info-panel">
-            <h3>{{ section["title"] }}</h3>
-            {% if section["items"] %}
-            <ul class="dense-list">
-                {% for item in section["items"] %}
-                <li>{{ item }}</li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="muted">暂无</p>
-            {% endif %}
+    <div class="req-workflow-summary">
+        <div>
+            <div class="req-next-step-label">工作流摘要</div>
+            <div style="font-size: 20px; font-weight: 800; margin-top: 6px;">当前建议：{{ next_step.title }}</div>
+            <p class="muted" style="margin: 6px 0 0;">已完成 {% if workflow %}{{ wf_stage_list | selectattr('status', 'equalto', 'completed') | list | length }}/{{ wf_stage_list | length }}{% else %}0/0{% endif %} 个阶段，下一步按当前推荐继续即可。</p>
         </div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="card">
-    <h2>3. 测试理解摘要</h2>
-    <p class="muted">用于快速对齐流程、核心规则和风险，不替代正式的测试范围与测试点清单。</p>
-
-    <div class="panel-grid" style="margin-top: 16px;">
-        {% for section in summary_sections %}
-        <div class="info-panel">
-            <h3>{{ section["title"] }}</h3>
-            {% if section["items"] %}
-            <ul class="dense-list">
-                {% for item in section["items"] %}
-                <li>{{ item }}</li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="muted">暂无</p>
+        <div class="req-workflow-summary-meta">
+            <span class="req-workflow-pill">当前状态：{{ requirement.analysis_status or "draft" }}</span>
+            {% if workflow and workflow.current_stage %}
+            <span class="req-workflow-pill">当前阶段：{{ stage_labels.get(workflow.current_stage, workflow.current_stage) }}</span>
             {% endif %}
+            {% if workflow and workflow.confirmed_stage %}
+            <span class="req-workflow-pill">最近确认：{{ stage_labels.get(workflow.confirmed_stage, workflow.confirmed_stage) }}</span>
+            {% endif %}
+            <a href="/workflow/{{ workflow.id }}/export" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">导出全部产出</a>
         </div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="card" id="analysis-scope">
-    <h2>4. 测试范围清单</h2>
-    <p class="muted">按功能点穷尽清单逐维度遍历，确保角色、页面、动作、数据、流程、规则与隐性状态均被覆盖。</p>
-
-    <div class="page-actions" style="margin-top: 12px;">
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn scope-filter-btn is-active" data-filter="all" onclick="filterScopeItems('all', this)">全部范围</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn scope-filter-btn" data-filter="high-priority" onclick="filterScopeItems('high-priority', this)">只看高优先级</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn scope-filter-btn" data-filter="empty-dimension" onclick="filterScopeItems('empty-dimension', this)">只看未说明维度</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn scope-filter-btn" data-filter="state-repeat" onclick="filterScopeItems('state-repeat', this)">状态流转与重复操作</button>
     </div>
 
-    <div class="stack-section" id="scope-sections-wrap">
-        {% for section in scope_sections %}
-        <details class="scenario-block scope-dimension-block" data-dimension="{{ section['title'] }}" data-item-count="{{ section['items'] | length }}" {% if section["items"] %}open{% endif %}>
-            <summary>
-                <div class="scenario-heading">
-                    <span>{{ section["title"] }}</span>
-                    <span class="scenario-count scope-dimension-count">{{ section["items"] | length }}</span>
-                </div>
-                <span class="scenario-toggle">
-                    {% if section["items"] %}
-                    点击展开/收起
-                    {% else %}
-                    当前维度暂未识别，建议确认是否未说明
-                    {% endif %}
-                </span>
-            </summary>
-
-            {% if section["items"] %}
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>功能点</th>
-                            <th>模块</th>
-                            <th>角色</th>
-                            <th>入口/页面</th>
-                            <th>优先级</th>
-                            <th>可测性</th>
-                            <th>需求来源</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in section["items"] %}
-                        <tr class="scope-item-row" data-priority="{{ item['priority'] }}" data-dimension="{{ section['title'] }}" data-role="{{ item['role'] }}" data-name="{{ item['name'] }}" data-rule="{{ item['rule_summary'] }}">
-                            <td>
-                                <strong>{{ item["name"] }}</strong>
-                                <div class="cell-subtext">{{ item["rule_summary"] }}</div>
-                            </td>
-                            <td>{{ item["module"] }}</td>
-                            <td>{{ item["role"] }}</td>
-                            <td>{{ item["page_or_entry"] }}</td>
-                            <td><span class="tag">{{ item["priority"] }}</span></td>
-                            <td>{{ item["testable"] }}</td>
-                            <td>{{ item["source_refs"] }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    {% for s in wf_stage_list %}
+    <details class="scenario-block" id="wf-stage-{{ s.stage_type }}" {% if s.status != 'completed' and loop.first %}open{% elif s.stage_type == workflow.current_stage %}open{% endif %} style="margin-bottom: 12px;">
+        <summary>
+            <div class="scenario-heading">
+                <span>{{ loop.index }}. {{ stage_labels[s.stage_type] }}</span>
+                {% if s.stage_type == 'outline' %}
+                <span class="tag" style="background: #eff6ff; color: #1d4ed8;"></span>
+                {% elif s.stage_type == 'analysis' %}
+                <span class="tag" style="background: #eff6ff; color: #1d4ed8;"></span>
+                {% elif (s.stage_type == 'plan' or s.stage_type == 'cases') and not review_ready %}
+                <span class="tag" style="background: #fff7ed; color: #c2410c;">需先人工确认</span>
+                {% endif %}
+                {% if s.status == 'completed' %}
+                <span class="tag" style="background: #d1fae5; color: #065f46;">已完成</span>
+                {% elif s.status == 'running' %}
+                <span class="tag" style="background: #fef3c7; color: #b45309;">生成中</span>
+                {% elif s.status == 'failed' %}
+                <span class="tag" style="background: #fee2e2; color: #991b1b;">失败</span>
+                {% else %}
+                <span class="tag">待处理</span>
+                {% endif %}
+                {% if workflow.confirmed_stage == s.stage_type %}
+                <span class="tag" style="background: #dbeafe; color: #1d4ed8;">已确认</span>
+                {% endif %}
             </div>
-            {% else %}
-            <p class="scenario-empty">当前维度暂无识别结果，建议在需求评审时确认该维度是否缺失说明。</p>
-            {% endif %}
-        </details>
-        {% endfor %}
-    </div>
-    <p class="muted" id="scope-filter-empty" style="margin-top: 12px; display: none;">当前筛选条件下暂无匹配的范围项。</p>
-</div>
+            <span class="scenario-toggle">点击展开/收起</span>
+        </summary>
 
-<div class="card" id="analysis-test-points">
-    <h2>5. 测试点列表</h2>
-    <p class="muted">每条测试点都应体现对象、动作、验证目标和来源，并显式标记真实用户使用场景补充。</p>
-
-    {% if test_point_rows %}
-    <div class="page-actions" style="margin-top: 12px;">
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn is-active" data-filter="all" onclick="filterTestPoints('all', this)">全部测试点</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn" data-filter="priority" onclick="filterTestPoints('priority', this)">只看重点</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn" data-filter="user-scene" onclick="filterTestPoints('user-scene', this)">只看真实用户场景</button>
-        <button type="button" class="btn btn-secondary btn-ghost filter-btn" data-filter="repeat-scene" onclick="filterTestPoints('repeat-scene', this)">只看重复/二次操作场景</button>
-    </div>
-    <div class="table-wrap">
-        <table class="data-table" id="test-point-table">
-            <thead>
-                <tr>
-                    <th>测试点</th>
-                    <th>类型</th>
-                    <th>模块</th>
-                    <th>动作</th>
-                    <th>验证重点</th>
-                    <th>真实用户场景</th>
-                    <th>场景分组</th>
-                    <th>需求来源</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in test_point_rows %}
-                <tr
-                    class="test-point-row"
-                    data-priority="{{ row['priority'] }}"
-                    data-user-scene="{{ row['user_scenario'] }}"
-                    data-repeat-scene="{{ row['is_repeat_scene'] }}"
-                >
-                    <td>
-                        <strong>{{ row["title"] }}</strong>
-                        <div class="cell-subtext">前置条件：{{ row["preconditions"] or "-" }}</div>
-                    </td>
-                    <td>
-                        <span class="tag">{{ row["type"] }}</span>
-                        <div class="cell-subtext">{{ row["category"] }} / {{ row["priority"] }}</div>
-                    </td>
-                    <td>{{ row["module"] }}</td>
-                    <td>{{ row["action"] }}</td>
-                    <td>{{ row["verification_focus"] }}</td>
-                    <td>
-                        {% if row["user_scenario"] == "是" %}
-                        <span class="tag tag-accent">{{ row["user_scenario_tag"] }}</span>
-                        {% else %}
-                        -
+        <div style="margin-top: 16px;">
+            <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/save">
+                <label>输入内容
+                    <span style="font-weight: 400; color: #6b7280; font-size: 13px;">
+                        {% if s.stage_type == 'outline' %}（需求文档已自动填入）
+                        {% elif s.stage_type == 'plan' %}（基于需求分析输出测试策略、范围和风险）
+                        {% elif s.stage_type == 'defects' %}（粘贴测试执行结果/失败日志）
+                        {% elif s.stage_type == 'prepare' %}（整理环境、账号、数据和依赖）
+                        {% elif s.stage_type == 'execute' %}（整理执行范围、结果、阻塞项和后续动作）
+                        {% elif s.stage_type == 'report' %}（粘贴执行统计和缺陷数据）
+                        {% else %}（上一阶段输出会自动填入）
                         {% endif %}
-                    </td>
-                    <td>{{ row["scene_bucket"] }}</td>
-                    <td>{{ row["source_refs"] }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <p class="muted" id="test-point-filter-empty" style="margin-top: 12px; display: none;">当前筛选条件下暂无测试点。</p>
-    {% else %}
-    <p class="muted">暂无结构化测试点，请先重新分析需求。</p>
-    {% endif %}
-</div>
-
-<div class="card" id="analysis-generic-points">
-    <h2>6. 空洞表述待清理</h2>
-    <p class="muted">这里只展示被识别为空洞的测试点，便于你集中清理动作、对象、验证目标不清晰的表达。</p>
-
-    {% if generic_test_point_rows %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>测试点</th>
-                    <th>模块</th>
-                    <th>类型</th>
-                    <th>动作</th>
-                    <th>验证重点</th>
-                    <th>需求来源</th>
-                    <th>识别原因</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in generic_test_point_rows %}
-                <tr>
-                    <td><strong>{{ row["title"] }}</strong></td>
-                    <td>{{ row["module"] }}</td>
-                    <td><span class="tag">{{ row["type"] }}</span></td>
-                    <td>{{ row["action"] }}</td>
-                    <td>{{ row["verification_focus"] }}</td>
-                    <td>{{ row["source_refs"] }}</td>
-                    <td>{{ row["reason"] }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="muted">当前未识别到需要清理的空洞表述。</p>
-    {% endif %}
-</div>
-
-<div class="card" id="analysis-gaps">
-    <h2>7. 需求疑义与遗漏</h2>
-    <p class="muted">汇总需求未说明项、模糊描述和建议确认的问题，用于评审会追问。</p>
-
-    {% if known_issue_rows or prelaunch_check_rows %}
-    <div class="panel-grid" style="margin-bottom: 16px;">
-        <div class="info-panel">
-            <h3>已知问题</h3>
-            {% if known_issue_rows %}
-            <ul class="dense-list">
-                {% for row in known_issue_rows %}
-                <li>
-                    <strong>{{ row["question"] }}</strong>
-                    <div class="cell-subtext">来源：{{ row["source_refs"] }}</div>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="muted">暂无已知问题。</p>
-            {% endif %}
-        </div>
-        <div class="info-panel">
-            <h3>上线检查项</h3>
-            {% if prelaunch_check_rows %}
-            <ul class="dense-list">
-                {% for row in prelaunch_check_rows %}
-                <li>
-                    <strong>{{ row["question"] }}</strong>
-                    <div class="cell-subtext">来源：{{ row["source_refs"] }}</div>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="muted">暂无上线检查项。</p>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
-
-    {% if gap_rows %}
-    <div class="panel-grid">
-        {% for row in gap_rows %}
-        <div class="info-panel info-panel-warning">
-            <h3>{{ row["dimension"] }}</h3>
-            <p>{{ row["question"] }}</p>
-            {% if row["suggestion"] %}
-            <p class="muted">建议：{{ row["suggestion"] }}</p>
-            {% endif %}
-            <p class="cell-subtext">来源：{{ row["source_refs"] }}</p>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted">当前未识别明显需求疑义。</p>
-    {% endif %}
-</div>
-
-<div class="card" id="analysis-terms">
-    <h2>8. 术语、追溯与自检</h2>
-    <p class="muted">将术语统一、原文锚定、理解复述与穷尽清单自检放在一起，避免误读和漏测。</p>
-
-    <div class="stack-section">
-        <details class="scenario-block" open>
-            <summary>
-                <div class="scenario-heading">
-                    <span>术语与缩写</span>
-                    <span class="scenario-count">{{ term_rows | length }}</span>
+                    </span>
+                </label>
+                <textarea name="input_content" rows="6" style="font-size: 13px;">{{ s.input_content or '' }}</textarea>
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                    <button type="submit" class="btn btn-secondary" style="font-size: 13px;">保存输入</button>
                 </div>
-                <span class="scenario-toggle">点击展开/收起</span>
-            </summary>
-            {% if term_rows %}
-            <div class="collapsible-body" data-max-height="320">
-                <div class="table-wrap" style="margin-top: 12px;">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>术语</th>
-                                <th>含义</th>
-                                <th>需求来源</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in term_rows %}
-                            <tr>
-                                <td><strong>{{ row["term"] }}</strong></td>
-                                <td>{{ row["meaning"] }}</td>
-                                <td>{{ row["source_refs"] }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% else %}
-            <p class="scenario-empty">暂无术语说明</p>
-            {% endif %}
-        </details>
+            </form>
 
-        <details class="scenario-block" open>
-            <summary>
-                <div class="scenario-heading">
-                    <span>理解一致性检查</span>
-                    <span class="scenario-count">{{ consistency_sections | length }}</span>
-                </div>
-                <span class="scenario-toggle">点击展开/收起</span>
-            </summary>
-            <div class="collapsible-body" data-max-height="320" style="margin-top: 12px;">
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>检查维度</th>
-                                <th>结果</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for section in consistency_sections %}
-                            <tr>
-                                <td><strong>{{ section["title"] }}</strong></td>
-                                <td>
-                                    {% if section["items"] %}
-                                    <ul class="dense-list" style="margin: 0;">
-                                        {% for item in section["items"] %}
-                                        <li>{{ item }}</li>
-                                        {% endfor %}
-                                    </ul>
-                                    {% else %}
-                                    <span class="muted">暂无</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </details>
-
-        <details class="scenario-block" id="analysis-traceability" open>
-            <summary>
-                <div class="scenario-heading">
-                    <span>需求追溯</span>
-                    <span class="scenario-count">{{ traceability_rows | length }}</span>
-                </div>
-                <span class="scenario-toggle">点击展开/收起</span>
-            </summary>
-            {% if traceability_rows %}
-            <div class="collapsible-body" data-max-height="320" style="margin-top: 12px;">
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>功能点ID</th>
-                                <th>测试点ID</th>
-                                <th>需求来源</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in traceability_rows %}
-                            <tr>
-                                <td>{{ row["scope_item_id"] }}</td>
-                                <td>{{ row["test_point_ids"] }}</td>
-                                <td>{{ row["source_refs"] }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% else %}
-            <p class="scenario-empty">暂无追溯关系</p>
-            {% endif %}
-        </details>
-
-        <details class="scenario-block" open>
-            <summary>
-                <div class="scenario-heading">
-                    <span>穷尽清单自检</span>
-                    <span class="scenario-count">{{ coverage_sections | length }}</span>
-                </div>
-                <span class="scenario-toggle">点击展开/收起</span>
-            </summary>
-            <div style="margin-top: 12px;">
-                <div class="coverage-grid">
-                    {% for row in coverage_sections %}
-                    <div class="coverage-item coverage-{{ row['status_code'] }}">
-                        <span>{{ row["label"] }}</span>
-                        <strong>{{ row["status"] }}</strong>
+            {% if s.output_content %}
+            <div style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <label style="margin: 0;">AI 生成结果</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="tab-preview active" onclick="toggleWfView('{{ s.stage_type }}', 'preview')" type="button" style="cursor: pointer; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db; background: #2563eb; color: #fff;">预览</button>
+                        <button class="tab-raw" onclick="toggleWfView('{{ s.stage_type }}', 'raw')" type="button" style="cursor: pointer; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #374151;">Markdown</button>
                     </div>
-                    {% endfor %}
+                </div>
+                <div class="collapsible-body" data-max-height="400">
+                    <div id="wf-preview-{{ s.stage_type }}" class="wf-md-output"></div>
+                    <div id="wf-raw-{{ s.stage_type }}" style="display: none;">
+                        <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/save">
+                            <input type="hidden" name="input_content" value="{{ s.input_content or '' }}">
+                            <textarea name="output_content" rows="14" style="font-family: monospace; font-size: 13px;" id="wf-raw-text-{{ s.stage_type }}">{{ s.output_content }}</textarea>
+                            <button type="submit" class="btn btn-secondary" style="font-size: 13px; margin-top: 8px;">保存修改</button>
+                        </form>
+                    </div>
                 </div>
             </div>
-        </details>
-    </div>
+            {% endif %}
+
+            {% if s.stage_type == 'analysis' and practical_analysis_modules %}
+            <div style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;" id="practical-analysis">
+                <h3 style="margin: 0 0 6px;">分析摘要</h3>
+                <p class="muted" style="margin: 0 0 14px;">这里保留后续测试计划、人工确认和测试用例会直接使用的关键字段。</p>
+
+                {% for module in practical_analysis_modules %}
+                <div style="margin-top: 18px; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px 18px; background: #fff;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                        <div>
+                            <div style="font-size: 18px; font-weight: 800;">{{ module.module }}</div>
+                            <div class="muted" style="font-size: 13px; margin-top: 4px;">类型：{{ module.categories }}{% if module.sources %} · 来源：{{ module.sources }}{% endif %}</div>
+                        </div>
+                        <span class="tag" style="background: #eef2ff; color: #4338ca;">{{ module.rows | length }} 个可落地场景</span>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>场景/测试点</th>
+                                    <th>页面/入口</th>
+                                    <th>用户动作</th>
+                                    <th>验证重点</th>
+                                    <th>前置条件</th>
+                                    <th>优先级</th>
+                                    <th>需求来源</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in module.rows %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ row.title }}</strong>
+                                        <div class="muted" style="margin-top: 4px;">{{ row.category }}{% if row.user_scenario == "是" %} · {{ row.user_scenario_tag }}{% endif %}</div>
+                                    </td>
+                                    <td>{{ row.page_or_entry or "-" }}</td>
+                                    <td style="white-space: pre-wrap;">{{ row.action or "-" }}</td>
+                                    <td style="white-space: pre-wrap;">{{ row.verification_focus or "-" }}</td>
+                                    <td style="white-space: pre-wrap;">{{ row.preconditions or "-" }}</td>
+                                    <td>{{ row.priority or "-" }}</td>
+                                    <td style="white-space: pre-wrap;">{{ row.source_refs or "-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if practical_pending_items %}
+                <div style="margin-top: 18px; padding: 14px 16px; border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa;">
+                    <strong style="display: block; margin-bottom: 8px; color: #9a3412;">待确认项</strong>
+                    <ul style="margin: 0; padding-left: 18px;">
+                        {% for item in practical_pending_items %}
+                        <li style="margin-bottom: 6px;">
+                            {{ item.question }}
+                            {% if item.suggestion %}
+                            <span class="muted">（建议：{{ item.suggestion }}）</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                {% if (s.stage_type == 'plan' or s.stage_type == 'cases') and not review_ready %}
+                <button type="button" class="btn" style="font-size: 13px; opacity: 0.5; cursor: not-allowed;" disabled>先完成人工确认</button>
+                <span class="muted" style="font-size: 12px;">人工确认完成后，再继续测试计划和用例编写。</span>
+                {% else %}
+                <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/generate" style="margin: 0;" class="wf-generate-form">
+                    <input type="hidden" name="use_llm" value="{% if can_use_llm_flag %}true{% else %}false{% endif %}" class="wf-use-llm-field">
+                    <button type="submit" class="btn wf-generate-btn" style="font-size: 13px;">
+                        {% if s.output_content %}
+                            {% if can_use_llm_flag %}重新生成{% else %}重新生成占位{% endif %}
+                        {% else %}
+                            {% if can_use_llm_flag %}AI 生成{{ stage_labels[s.stage_type] }}{% else %}生成占位 — {{ stage_labels[s.stage_type] }}{% endif %}
+                        {% endif %}
+                    </button>
+                </form>
+                {% endif %}
+                {% if s.output_content %}
+                <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/confirm" style="margin: 0;">
+                    <button type="submit" class="btn btn-secondary" style="font-size: 13px;">
+                        {% if workflow.confirmed_stage == s.stage_type %}已确认当前阶段{% else %}确认当前阶段{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+                {% if s.stage_type == 'cases' %}
+                <span class="muted" style="font-size: 12px;">本阶段生成/保存后会自动同步到正式用例库</span>
+                {% endif %}
+                {% if s.completed_at %}
+                <span class="muted" style="font-size: 12px;">完成于 {{ s.completed_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </details>
+    {% endfor %}
 </div>
+{% endif %}
 
 <div class="card">
-    <h2>9. 人工确认</h2>
+    <h2>人工确认测试点</h2>
     <p class="muted">删掉废话、补充业务经验、选出核心回归点，并保留你认可的测试点口径。</p>
 
     <form method="post" action="/requirements/{{ requirement.id }}/review" id="review-form">
@@ -591,18 +674,18 @@
                                     </select>
                                 </div>
                                 <div class="editor-field">
-                                    <label>来源</label>
-                                    <input type="text" class="point-source-refs-input" value="{{ point.source_refs or point.requirement_source or point.title }}">
-                                </div>
-                                <div class="editor-field">
-                                    <label>入口/页面</label>
-                                    <input type="text" class="point-page-or-entry-input" value="{{ point.page_or_entry or point.context or '需求原文' }}">
-                                </div>
-                                <div class="editor-field">
                                     <label>角色</label>
                                     <input type="text" class="point-role-input" value="{{ point.role or '未说明' }}">
                                 </div>
-                                <div class="editor-field">
+                                <div class="editor-field editor-field-wide">
+                                    <label>来源</label>
+                                    <input type="text" class="point-source-refs-input" value="{{ point.source_refs or point.requirement_source or point.title }}">
+                                </div>
+                                <div class="editor-field editor-field-wide">
+                                    <label>入口/页面</label>
+                                    <input type="text" class="point-page-or-entry-input" value="{{ point.page_or_entry or point.context or '需求原文' }}">
+                                </div>
+                                <div class="editor-field editor-field-wide">
                                     <label>动作</label>
                                     <input type="text" class="point-action-input" value="{{ point.action or point.title }}">
                                 </div>
@@ -689,15 +772,9 @@
             </div>
         </details>
 
-        <div class="panel-grid" style="margin-top: 20px;">
-            <div class="info-panel">
-                <label for="custom_points" style="margin-bottom: 8px;">补充业务经验</label>
-                <textarea id="custom_points" name="custom_points" rows="5" placeholder="每行一条">{{ "\n".join(custom_points) }}</textarea>
-            </div>
-            <div class="info-panel">
-                <label for="review_notes" style="margin-bottom: 8px;">人工确认说明</label>
-                <textarea id="review_notes" name="review_notes" rows="5" placeholder="记录删掉废话、补充经验和确认口径。">{{ requirement.review_notes or "" }}</textarea>
-            </div>
+        <div style="margin-top: 20px;">
+            <label for="review_notes" style="margin-bottom: 8px;">人工补充说明</label>
+            <textarea id="review_notes" name="review_notes" rows="5" placeholder="补充业务经验、删掉的废话原因、确认的口径等，每行一条">{{ review_notes_merged }}</textarea>
         </div>
 
         {% if core_regression_points %}
@@ -717,261 +794,21 @@
     </form>
 </div>
 
-<div class="card">
-    <h2>10. 测试工具规划</h2>
-    <p class="muted">基于核心回归点和风险，生成推荐工具与执行策略。</p>
-
-    <div class="page-actions" style="margin-top: 0;">
-        <form method="post" action="/requirements/{{ requirement.id }}/tool-plan" style="margin: 0;">
-            <button class="btn btn-secondary" type="submit">生成工具规划</button>
-        </form>
-        <form method="post" action="/testcases/generate-from-requirement/{{ requirement.id }}" style="margin: 0;">
-            <button
-                class="btn"
-                type="submit"
-                {% if requirement.analysis_status not in ["reviewed", "ready_for_execution"] %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}
-            >
-                AI 生成用例
-            </button>
-        </form>
-    </div>
-
-    {% if tool_plan %}
-    <div style="overflow-x: auto; margin-top: 16px;">
-        <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr>
-                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">工具/方式</th>
-                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">覆盖范围</th>
-                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">关注目标</th>
-                    <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">原因</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in tool_plan %}
-                <tr>
-                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.tool }}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.scope }}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.target }}</td>
-                    <td style="border: 1px solid #d1d5db; padding: 10px;">{{ item.reason }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="muted">暂无工具规划。</p>
-    {% endif %}
-</div>
-
-{% if workflow %}
-<div class="card" id="ai-workflow">
-    <h2>11. AI 测试工作流</h2>
-    <p class="muted">基于需求内容逐阶段生成测试产出。每个阶段的输出自动流入下一阶段。</p>
-
-    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 20px;">
-        {% for s in wf_stage_list %}
-        <a href="#wf-stage-{{ s.stage_type }}"
-           style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; text-decoration: none;
-           {% if s.status == 'completed' %}background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;
-           {% elif s.status == 'running' %}background: #fef3c7; color: #b45309; border: 1px solid #fde68a;
-           {% elif s.status == 'failed' %}background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
-           {% else %}background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb;{% endif %}">
-            <span>{{ loop.index }}. {{ stage_labels[s.stage_type] }}</span>
-            {% if s.status == 'completed' %}<span style="font-size: 11px;">&#10003;</span>{% endif %}
-        </a>
-        {% endfor %}
-        {% if workflow %}
-        <a href="/workflow/{{ workflow.id }}/export" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px; margin-left: auto;">导出全部产出</a>
-        {% endif %}
-    </div>
-
-    {% for s in wf_stage_list %}
-    <details class="scenario-block" id="wf-stage-{{ s.stage_type }}" {% if s.status != 'completed' and loop.first %}open{% elif s.stage_type == workflow.current_stage %}open{% endif %} style="margin-bottom: 12px;">
-        <summary>
-            <div class="scenario-heading">
-                <span>{{ loop.index }}. {{ stage_labels[s.stage_type] }}</span>
-                {% if s.status == 'completed' %}
-                <span class="tag" style="background: #d1fae5; color: #065f46;">已完成</span>
-                {% elif s.status == 'running' %}
-                <span class="tag" style="background: #fef3c7; color: #b45309;">生成中</span>
-                {% elif s.status == 'failed' %}
-                <span class="tag" style="background: #fee2e2; color: #991b1b;">失败</span>
-                {% else %}
-                <span class="tag">待处理</span>
-                {% endif %}
-            </div>
-            <span class="scenario-toggle">点击展开/收起</span>
-        </summary>
-
-        <div style="margin-top: 16px;">
-            <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/save">
-                <label>输入内容
-                    <span style="font-weight: 400; color: #6b7280; font-size: 13px;">
-                        {% if s.stage_type == 'outline' %}（需求文档已自动填入）
-                        {% elif s.stage_type == 'defects' %}（粘贴测试执行结果/失败日志）
-                        {% elif s.stage_type == 'report' %}（粘贴执行统计和缺陷数据）
-                        {% else %}（上一阶段输出会自动填入）
-                        {% endif %}
-                    </span>
-                </label>
-                <textarea name="input_content" rows="6" style="font-size: 13px;">{{ s.input_content or '' }}</textarea>
-                <div style="display: flex; gap: 10px; margin-top: 8px;">
-                    <button type="submit" class="btn btn-secondary" style="font-size: 13px;">保存输入</button>
-                </div>
-            </form>
-
-            {% if s.output_content %}
-            <div style="margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-                    <label style="margin: 0;">AI 生成结果</label>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="tab-preview active" onclick="toggleWfView('{{ s.stage_type }}', 'preview')" type="button" style="cursor: pointer; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db; background: #2563eb; color: #fff;">预览</button>
-                        <button class="tab-raw" onclick="toggleWfView('{{ s.stage_type }}', 'raw')" type="button" style="cursor: pointer; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #374151;">Markdown</button>
-                    </div>
-                </div>
-                <div class="collapsible-body" data-max-height="400">
-                    <div id="wf-preview-{{ s.stage_type }}" class="wf-md-output"></div>
-                    <div id="wf-raw-{{ s.stage_type }}" style="display: none;">
-                        <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/save">
-                            <input type="hidden" name="input_content" value="{{ s.input_content or '' }}">
-                            <textarea name="output_content" rows="14" style="font-family: monospace; font-size: 13px;" id="wf-raw-text-{{ s.stage_type }}">{{ s.output_content }}</textarea>
-                            <button type="submit" class="btn btn-secondary" style="font-size: 13px; margin-top: 8px;">保存修改</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center;">
-                {% if can_use_llm_flag %}
-                <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/generate" style="margin: 0;">
-                    <button type="submit" class="btn" style="font-size: 13px;"
-                        onclick="this.disabled=true; this.textContent='生成中...';">
-                        {% if s.output_content %}重新生成{% else %}AI 生成{{ stage_labels[s.stage_type] }}{% endif %}
-                    </button>
-                </form>
-                {% else %}
-                <span style="color: #ef4444; font-size: 13px;">LLM 未配置，请在 .env 中设置 LLM_API_KEY</span>
-                {% endif %}
-                {% if s.completed_at %}
-                <span class="muted" style="font-size: 12px;">完成于 {{ s.completed_at.strftime('%Y-%m-%d %H:%M') }}</span>
-                {% endif %}
-            </div>
-        </div>
-    </details>
-    {% endfor %}
-</div>
-{% endif %}
-
-<div class="card" id="generated-testcases">
-    <h2>12. 已生成用例</h2>
-    {% if requirement.test_cases %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>用例ID</th>
-                    <th>标题</th>
-                    <th>模块</th>
-                    <th>优先级</th>
-                    <th>前置条件</th>
-                    <th>测试步骤</th>
-                    <th>预期结果</th>
-                    <th>状态</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for testcase in requirement.test_cases %}
-                <tr>
-                    <td>{{ testcase.case_id }}</td>
-                    <td>{{ testcase.title }}</td>
-                    <td>{{ testcase.module or "-" }}</td>
-                    <td>{{ testcase.priority or "-" }}</td>
-                    <td style="white-space: pre-wrap;">{{ testcase.preconditions or "-" }}</td>
-                    <td style="white-space: pre-wrap;">{{ testcase.steps or "-" }}</td>
-                    <td style="white-space: pre-wrap;">{{ testcase.expected or "-" }}</td>
-                    <td>
-                        {{ testcase.status }}
-                        {% if testcase.locked %}<span class="muted"> / 已锁定</span>{% endif %}
-                    </td>
-                    <td>
-                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="muted">当前还没有生成用例。</p>
-    {% endif %}
-</div>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
 <script>
     const deletedPointIds = new Set();
 
-    function filterTestPoints(filterType, button) {
-        const rows = Array.from(document.querySelectorAll("#test-point-table .test-point-row"));
-        const empty = document.getElementById("test-point-filter-empty");
-        let visibleCount = 0;
-        rows.forEach((row) => {
-            const priority = row.dataset.priority || "P2";
-            const userScene = row.dataset.userScene || "否";
-            const repeatScene = row.dataset.repeatScene || "否";
-            let visible = true;
-            if (filterType === "priority") visible = priority === "P0" || priority === "P1";
-            else if (filterType === "user-scene") visible = userScene === "是";
-            else if (filterType === "repeat-scene") visible = repeatScene === "是";
-            row.style.display = visible ? "" : "none";
-            if (visible) visibleCount += 1;
-        });
-        if (empty) empty.style.display = visibleCount ? "none" : "block";
-        document.querySelectorAll("#analysis-test-points .filter-btn").forEach((item) => item.classList.remove("is-active"));
-        if (button) button.classList.add("is-active");
+    function renderMarkdown(text) {
+        if (typeof marked !== "undefined" && typeof marked.parse === "function") {
+            return marked.parse(text || "");
+        }
+        return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
     }
 
-    function filterScopeItems(filterType, button) {
-        const STATE_KEYWORDS = ["状态", "流程", "流转", "切换", "生命周期", "审批", "审核", "上线", "下线", "启用", "停用", "上架", "下架"];
-        const REPEAT_KEYWORDS = ["重复", "再次", "二次", "多次", "连续", "反复", "撤销", "回退", "重做"];
-        const blocks = Array.from(document.querySelectorAll(".scope-dimension-block"));
-        const empty = document.getElementById("scope-filter-empty");
-        let totalVisible = 0;
-        blocks.forEach((block) => {
-            const rows = Array.from(block.querySelectorAll(".scope-item-row"));
-            const itemCount = parseInt(block.dataset.itemCount, 10) || 0;
-            if (filterType === "empty-dimension") { block.style.display = itemCount === 0 ? "" : "none"; if (itemCount === 0) totalVisible += 1; return; }
-            let sectionVisible = 0;
-            rows.forEach((row) => {
-                const priority = row.dataset.priority || "P2";
-                const blob = ((row.dataset.name || "") + " " + (row.dataset.rule || "")).toLowerCase();
-                let visible = true;
-                if (filterType === "high-priority") visible = priority === "P0" || priority === "P1";
-                else if (filterType === "state-repeat") visible = STATE_KEYWORDS.some((k) => blob.includes(k)) || REPEAT_KEYWORDS.some((k) => blob.includes(k));
-                row.style.display = visible ? "" : "none";
-                if (visible) sectionVisible += 1;
-            });
-            if (filterType === "all") { block.style.display = ""; totalVisible += 1; }
-            else {
-                block.style.display = sectionVisible > 0 ? "" : "none";
-                const countEl = block.querySelector(".scope-dimension-count");
-                if (countEl) countEl.textContent = sectionVisible + " / " + rows.length;
-                if (sectionVisible > 0) totalVisible += 1;
-            }
-        });
-        if (filterType === "all") {
-            blocks.forEach((block) => {
-                block.querySelectorAll(".scope-item-row").forEach((r) => r.style.display = "");
-                const countEl = block.querySelector(".scope-dimension-count");
-                if (countEl) countEl.textContent = block.querySelectorAll(".scope-item-row").length;
-            });
-            totalVisible = blocks.length;
-        }
-        if (empty) empty.style.display = totalVisible ? "none" : "block";
-        document.querySelectorAll("#analysis-scope .scope-filter-btn").forEach((item) => item.classList.remove("is-active"));
-        if (button) button.classList.add("is-active");
-    }
 
     /* --- collapsible body: fixed height with expand/collapse, no page jump --- */
     function initCollapsibleBodies() {
@@ -1163,10 +1000,10 @@
                         <div class="editor-field editor-field-wide"><label>测试点描述</label><textarea class="point-title-input" rows="3">${escapeHtml(title)}</textarea></div>
                         <div class="editor-field"><label>模块</label><input type="text" class="point-module-input" value="${escapeHtml(module)}"></div>
                         <div class="editor-field"><label>优先级</label><select class="point-priority-input"><option value="P0">P0</option><option value="P1">P1</option><option value="P2" selected>P2</option></select></div>
-                        <div class="editor-field"><label>来源</label><input type="text" class="point-source-refs-input" value="人工新增"></div>
-                        <div class="editor-field"><label>入口/页面</label><input type="text" class="point-page-or-entry-input" value="人工新增"></div>
                         <div class="editor-field"><label>角色</label><input type="text" class="point-role-input" value="未说明"></div>
-                        <div class="editor-field"><label>动作</label><input type="text" class="point-action-input" value="${escapeHtml(title)}"></div>
+                        <div class="editor-field editor-field-wide"><label>来源</label><input type="text" class="point-source-refs-input" value="人工新增"></div>
+                        <div class="editor-field editor-field-wide"><label>入口/页面</label><input type="text" class="point-page-or-entry-input" value="人工新增"></div>
+                        <div class="editor-field editor-field-wide"><label>动作</label><input type="text" class="point-action-input" value="${escapeHtml(title)}"></div>
                         <div class="editor-field editor-field-wide"><label>前置条件</label><textarea class="point-preconditions-input" rows="2"></textarea></div>
                         <div class="editor-field editor-field-wide"><label>验证重点</label><textarea class="point-verification-focus-input" rows="2"></textarea></div>
                         <div class="editor-field"><label class="inline-checkbox"><input type="checkbox" class="point-user-scenario-input" style="width: auto; margin: 0;"> 真实用户场景</label></div>
@@ -1259,19 +1096,67 @@
     }
 
     function initWfMarkdown() {
-        if (typeof marked === 'undefined') return;
         document.querySelectorAll('[id^="wf-raw-text-"]').forEach(function(textarea) {
             var stageType = textarea.id.replace('wf-raw-text-', '');
             var preview = document.getElementById('wf-preview-' + stageType);
             if (preview && textarea.value) {
-                preview.innerHTML = marked.parse(textarea.value);
+                preview.innerHTML = renderMarkdown(textarea.value);
             }
         });
     }
 
+    function initPageLlmToggle() {
+    var cb = document.getElementById('page-use-llm');
+    if (!cb) return;
+
+    var storageKey = 'wf-use-llm-preference';
+    try {
+        var saved = window.localStorage.getItem(storageKey);
+        if (saved === 'true' || saved === 'false') {
+            cb.checked = saved === 'true';
+        }
+    } catch (e) {}
+
+    function sync() {
+        var value = cb.checked ? 'true' : 'false';
+        document.querySelectorAll('.wf-use-llm-field').forEach(function(input) {
+            input.value = value;
+        });
+        try {
+            window.localStorage.setItem(storageKey, value);
+        } catch (e) {}
+    }
+
+    cb.addEventListener('change', sync);
+    cb.addEventListener('input', sync);
+    cb.addEventListener('click', sync);
+    sync();
+}
+
+function initWfGenerateForms() {
+    document.querySelectorAll('.wf-generate-form').forEach(function(form) {
+        form.addEventListener('submit', function() {
+            var cb = document.getElementById('page-use-llm');
+            var hidden = form.querySelector('.wf-use-llm-field');
+            if (cb && hidden) {
+                hidden.value = cb.checked ? 'true' : 'false';
+            }
+
+            var button = form.querySelector('.wf-generate-btn');
+            if (!button || button.disabled) return;
+            window.setTimeout(function() {
+                button.disabled = true;
+                button.textContent = '生成中...';
+            }, 0);
+        });
+    });
+}
+
     initRequirementContentToggle();
     initCollapsibleBodies();
     syncEmptyState();
+    initPageLlmToggle();
+    initWfGenerateForms();
     initWfMarkdown();
 </script>
 {% endblock %}

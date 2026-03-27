@@ -441,6 +441,32 @@ def _normalize_source_refs(value: Any, *, fallback: str = "需求原文", limit:
     return [fallback]
 
 
+def _looks_like_explicit_identifier(text: str) -> bool:
+    cleaned = _clean_text(text)
+    if not cleaned:
+        return False
+    patterns = (
+        r"/api/[A-Za-z0-9/_\-]+",
+        r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*",
+        r"[A-Za-z_][A-Za-z0-9_]{2,}",
+        r"[a-z]+(?:_[a-z0-9]+){1,}",
+        r"[A-Z]{2,}-\d{2,}",
+    )
+    return any(re.search(pattern, cleaned) for pattern in patterns)
+
+
+def _anchored_or_pending(value: str, *evidence_texts: str, fallback: str = "待确认") -> str:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return fallback
+    if not _looks_like_explicit_identifier(cleaned):
+        return cleaned
+    normalized_evidence = " ".join(_clean_text(text) for text in evidence_texts if _clean_text(text))
+    if cleaned in normalized_evidence:
+        return cleaned
+    return fallback
+
+
 def _contains_keyword(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
 
@@ -460,7 +486,8 @@ def _shorten_text(text: str, limit: int = 28) -> str:
 
 
 def _split_sentences(content: str) -> list[str]:
-    normalized_content = re.sub(r"(?<!https?):(?=[^\d/])", "：", content or "")
+    normalized_content = content or ""
+    normalized_content = re.sub(r"(?<!http)(?<!https):(?=[^\d/])", "：", normalized_content)
     raw_parts = re.split(r"[\r\n]+|(?<=[。！？!?；;])|(?<=：)(?=.{4,})", normalized_content)
     sentences: list[str] = []
     for part in raw_parts:
@@ -644,6 +671,248 @@ def _extract_requirement_items(content: str, title: str = "") -> list[dict[str, 
     ]
 
 
+def _normalize_table_key(value: str) -> str:
+    return re.sub(r"[\s:：()（）/_\-]+", "", _clean_text(value)).lower()
+
+
+def _table_cells(line: str) -> list[str] | None:
+    stripped = line.strip()
+    if not stripped.startswith("|") or stripped.count("|") < 2:
+        return None
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _is_markdown_table_separator(cells: list[str] | None) -> bool:
+    if not cells:
+        return False
+    cleaned = [re.sub(r"\s+", "", cell) for cell in cells]
+    return all(bool(cell) and re.fullmatch(r":?-{3,}:?", cell) for cell in cleaned)
+
+
+def _extract_markdown_tables(content: str, title: str = "") -> list[dict[str, Any]]:
+    lines = [line.rstrip() for line in (content or "").splitlines()]
+    current_module = _clean_text(title) or "默认模块"
+    context_stack: list[tuple[int, str]] = []
+    tables: list[dict[str, Any]] = []
+    index = 0
+
+    while index < len(lines):
+        line = lines[index]
+        heading = _heading_level(line)
+        if heading:
+            level, text = heading
+            if level == 1:
+                current_module = text or current_module
+                context_stack = []
+            else:
+                while context_stack and context_stack[-1][0] >= level:
+                    context_stack.pop()
+                context_stack.append((level, text))
+            index += 1
+            continue
+
+        header_cells = _table_cells(line)
+        separator_cells = _table_cells(lines[index + 1]) if index + 1 < len(lines) else None
+        if header_cells and separator_cells and _is_markdown_table_separator(separator_cells):
+            rows: list[dict[str, str]] = []
+            index += 2
+            while index < len(lines):
+                row_cells = _table_cells(lines[index])
+                if not row_cells or _is_markdown_table_separator(row_cells):
+                    break
+                if len(row_cells) < len(header_cells):
+                    row_cells.extend([""] * (len(header_cells) - len(row_cells)))
+                row_cells = row_cells[:len(header_cells)]
+                row = {
+                    header_cells[col_index]: row_cells[col_index]
+                    for col_index in range(len(header_cells))
+                    if _clean_text(header_cells[col_index])
+                }
+                if any(_clean_text(value) for value in row.values()):
+                    rows.append(row)
+                index += 1
+            if rows:
+                tables.append(
+                    {
+                        "module": current_module,
+                        "heading_path": [text for _, text in context_stack],
+                        "nearest_heading": context_stack[-1][1] if context_stack else current_module,
+                        "headers": header_cells,
+                        "rows": rows,
+                    }
+                )
+            continue
+
+        index += 1
+
+    return tables
+
+
+def _table_row_get(row: dict[str, str], *candidate_headers: str) -> str:
+    normalized_candidates = [_normalize_table_key(header) for header in candidate_headers if _normalize_table_key(header)]
+    for key, value in row.items():
+        normalized_key = _normalize_table_key(key)
+        if any(candidate in normalized_key or normalized_key in candidate for candidate in normalized_candidates):
+            cleaned_value = _clean_text(value)
+            if cleaned_value:
+                return cleaned_value
+    return ""
+
+
+def _extract_structured_terms(content: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for table in _extract_markdown_tables(content):
+        headers_key = [_normalize_table_key(header) for header in table["headers"]]
+        if not any("术语" in header for header in headers_key):
+            continue
+        if not any("含义" in header or "说明" in header for header in headers_key):
+            continue
+        for row in table["rows"]:
+            term = _table_row_get(row, "术语", "名词")
+            meaning = _table_row_get(row, "本需求中的含义", "含义", "说明")
+            source = _table_row_get(row, "需求来源", "来源")
+            if not term or not meaning or term in seen:
+                continue
+            rows.append(
+                {
+                    "term": term,
+                    "meaning": meaning,
+                    "source_refs": [source or "需求原文"],
+                }
+            )
+            seen.add(term)
+    return rows[:12]
+
+
+def _extract_structured_scope_items(content: str, title: str = "") -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    fallback_module = _clean_text(title) or "默认模块"
+
+    for table in _extract_markdown_tables(content, title=title):
+        nearest_heading = _clean_text(table.get("nearest_heading", "")) or fallback_module
+        heading_path = [_clean_text(item) for item in table.get("heading_path", []) if _clean_text(item)]
+        headers_key = [_normalize_table_key(header) for header in table["headers"]]
+        has_scope_table = (
+            any("功能点" in header for header in headers_key)
+            and any("需求来源" in header or "对应需求" in header for header in headers_key)
+        )
+        if not has_scope_table:
+            continue
+
+        dimension = nearest_heading if nearest_heading in ANALYSIS_DIMENSIONS else ""
+        if not dimension:
+            for path_item in reversed(heading_path):
+                if path_item in ANALYSIS_DIMENSIONS:
+                    dimension = path_item
+                    break
+        if not dimension and any("测试范围" in item for item in heading_path):
+            dimension = "操作/动作"
+        if not dimension:
+            dimension = "操作/动作"
+
+        for row in table["rows"]:
+            name = _table_row_get(row, "功能点", "功能", "对应功能")
+            focus = _table_row_get(row, "测试关注点", "关注点", "备注")
+            source = _table_row_get(row, "对应需求", "需求来源", "来源")
+            priority = _table_row_get(row, "优先级")
+            notes = _table_row_get(row, "备注")
+            if not name:
+                continue
+            key = (dimension, name, source or notes)
+            if key in seen:
+                continue
+            rows.append(
+                {
+                    "id": f"S{len(rows) + 1:03d}",
+                    "name": name,
+                    "dimension": dimension,
+                    "module": fallback_module,
+                    "role": _table_row_get(row, "角色", "用户") or "未说明",
+                    "page_or_entry": _table_row_get(row, "入口/页面", "页面/入口", "入口", "页面") or nearest_heading or fallback_module,
+                    "object": _table_row_get(row, "对象", "字段", "数据项") or name,
+                    "rule_summary": focus or notes or name,
+                    "priority": priority or "P1",
+                    "testable": (_table_row_get(row, "可测性") or "是") != "否",
+                    "source_refs": [source or "需求原文"],
+                    "notes": notes,
+                }
+            )
+            seen.add(key)
+    return rows[:40]
+
+
+def _extract_structured_test_points(content: str, title: str = "") -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    fallback_module = _clean_text(title) or "默认模块"
+
+    for table in _extract_markdown_tables(content, title=title):
+        headers_key = [_normalize_table_key(header) for header in table["headers"]]
+        has_scene_table = (
+            any("场景类型" in header for header in headers_key)
+            and any("测试关注点" in header or "功能点" in header for header in headers_key)
+        )
+        if not has_scene_table:
+            continue
+        for index, row in enumerate(table["rows"], start=1):
+            scene_type = _table_row_get(row, "场景类型")
+            title_text = _table_row_get(row, "测试关注点", "功能点")
+            module = _table_row_get(row, "对应功能", "模块") or fallback_module
+            source = _table_row_get(row, "需求来源", "对应需求", "来源")
+            if not title_text:
+                continue
+            category = _infer_semantic_category(title_text, _classify_point(title_text))
+            key = (module, title_text)
+            if key in seen:
+                continue
+            points.append(
+                {
+                    "id": f"TP-S{len(points) + 1:03d}",
+                    "scope_item_id": "",
+                    "title": title_text,
+                    "type": "user_scene" if scene_type else "normal",
+                    "category": category,
+                    "module": module,
+                    "role": _table_row_get(row, "角色", "用户") or "未说明",
+                    "page_or_entry": _table_row_get(row, "入口/页面", "页面/入口", "页面") or module,
+                    "preconditions": [],
+                    "action": title_text,
+                    "verification_focus": [title_text],
+                    "user_scenario": bool(scene_type),
+                    "user_scenario_tag": scene_type,
+                    "priority": _table_row_get(row, "优先级") or "P1",
+                    "source_refs": [source or "需求原文"],
+                }
+            )
+            seen.add(key)
+    return points[:40]
+
+
+def _extract_structured_gaps(content: str) -> list[str]:
+    lines = [line.rstrip() for line in (content or "").splitlines()]
+    current_section = ""
+    gaps: list[str] = []
+    for line in lines:
+        heading = _heading_level(line)
+        if heading:
+            _, text = heading
+            current_section = text
+            continue
+        if not current_section or ("疑义" not in current_section and "待确认" not in current_section):
+            continue
+        bullet = _bullet_text(line)
+        if bullet is None:
+            continue
+        cleaned = re.sub(r"^\[[ xX]\]\s*", "", bullet).strip()
+        cleaned = re.sub(r"^\*\*(.+?)\*\*[:：]?", r"\1", cleaned).strip()
+        cleaned = _clean_text(cleaned)
+        if cleaned:
+            gaps.append(cleaned)
+    return _dedupe(gaps)[:8]
+
+
 def _score_rule_unit(unit: dict[str, Any]) -> int:
     score = 1
     if unit["condition"]:
@@ -796,14 +1065,16 @@ def _infer_priority_from_unit(unit: dict[str, Any]) -> str:
 
 def _extract_page_or_entry(unit: dict[str, Any]) -> str:
     context = _rule_context(unit)
-    return context if context != "需求原文" else (unit.get("module") or "默认入口")
+    if context != "需求原文":
+        return _anchored_or_pending(context, unit.get("source", ""), unit.get("context", ""))
+    return "待确认"
 
 
 def _extract_business_object(unit: dict[str, Any]) -> str:
     hits = [keyword for keyword in BUSINESS_ACTOR_HINTS + CONFIG_KEYWORDS if keyword in unit["source"]]
     if hits:
         return " / ".join(_dedupe(hits)[:3])
-    return _rule_label(unit)
+    return "待确认"
 
 
 def _build_scope_items(rule_units: list[dict[str, Any]], title: str = "") -> list[dict[str, Any]]:
@@ -1153,7 +1424,8 @@ def _selected_points_from_test_points(test_points: list[dict[str, Any]], *, titl
 def _core_rule_text(unit: dict[str, Any]) -> str:
     actor_text = unit["actor"] if unit["actor"] and unit["actor"] != "系统" else "用户/系统"
     condition_text = f"在{unit['condition']}下" if unit["condition"] else ""
-    expectation_text = "、".join(_rule_expectations(unit)[:3])
+    expectation_items = _rule_expectations(unit)[:3]
+    expectation_text = "、".join(expectation_items) if expectation_items else "待确认"
     return _clean_text(f"{actor_text}{condition_text}执行{_rule_label(unit)}时，需保证{expectation_text}")
 
 
@@ -1658,6 +1930,8 @@ def call_llm_for_analysis(content: str) -> dict[str, Any]:
     system_prompt = (
         "你是一名资深测试工程师和测试需求分析专家。"
         "请严格基于已提供的需求文档分析，不臆造业务逻辑。"
+        "禁止发明输入中未出现的接口名、字段名、数据库表名、事件名、任务名、URL、Webhook、状态码或技术实现细节。"
+        "如果输入没有明确给出这些信息，统一写“待确认”，不要凭经验补全。"
         "你必须按以下顺序完成分析："
         "1）按功能点穷尽清单逐项遍历角色/用户、页面/入口、操作/动作、接口/数据、状态/流程、规则/约束、非功能、关联/依赖、隐性需求/界面状态；"
         "2）补充真实用户使用场景，包括误操作、重复提交、中断恢复、弱网、输入粘贴、多端多态、用户差异；"
@@ -1716,7 +1990,14 @@ def _build_requirement_analysis_by_rules(content: str, title: str = "") -> dict[
 
     rule_units = _extract_rule_units(content, title=title)
     special_items = _extract_special_requirement_items(content, title=title)
-    gaps = _build_requirement_gaps(content, rule_units)
+    structured_terms = _extract_structured_terms(content)
+    structured_scope_items = _extract_structured_scope_items(content, title=title)
+    structured_test_points = _extract_structured_test_points(content, title=title)
+    structured_gaps = _extract_structured_gaps(content)
+
+    scope_items = structured_scope_items or _build_scope_items(rule_units, title=title)
+    test_points = structured_test_points or _build_test_points_from_scope_items(scope_items)
+    gaps = structured_gaps or _build_requirement_gaps(content, rule_units)
     for item in special_items.get("known_issue", [])[:3]:
         gaps.append(f"已知问题：{item['sentence']}（{item['module']}）")
     for item in special_items.get("prelaunch_check", [])[:2]:
@@ -1724,8 +2005,6 @@ def _build_requirement_analysis_by_rules(content: str, title: str = "") -> dict[
     gaps = _dedupe(gaps)[:6]
     summary = _build_summary(rule_units, gaps)
     test_standards = _build_test_standards(content, rule_units)
-    scope_items = _build_scope_items(rule_units, title=title)
-    test_points = _build_test_points_from_scope_items(scope_items)
     selected_points = _selected_points_from_test_points(test_points, title=title)
     consistency_check = _build_consistency_check(content, scope_items, test_points)
     quality_report = _build_quality_report(scope_items, test_points, gaps, consistency_check)
@@ -1740,7 +2019,7 @@ def _build_requirement_analysis_by_rules(content: str, title: str = "") -> dict[
         "summary": summary,
         "gaps": gaps,
         "test_standards": test_standards,
-        "terms": _build_terms(content),
+        "terms": structured_terms or _build_terms(content),
         "scope_items": scope_items,
         "test_points": test_points,
         "selected_points": selected_points,
@@ -1779,6 +2058,216 @@ def build_requirement_analysis(content: str, title: str = "", use_llm: bool = Fa
             logger.exception("LLM analysis failed, fallback to rules: %s", exc)
 
     return _build_requirement_analysis_by_rules(content, title=title)
+
+
+def _markdown_cell(value: Any) -> str:
+    text = _clean_text(str(value or ""))
+    if not text:
+        return "-"
+    return text.replace("|", "\\|")
+
+
+def _markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        normalized = [_markdown_cell(cell) for cell in row]
+        lines.append("| " + " | ".join(normalized) + " |")
+    return "\n".join(lines)
+
+
+def _join_refs(value: Any, *, fallback: str = "需求原文") -> str:
+    refs = _normalize_source_refs(value, limit=8)
+    return "；".join(refs) or fallback
+
+
+def _group_points_by_scope(test_points: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for point in test_points:
+        grouped.setdefault(str(point.get("scope_item_id", "")), [])
+        grouped[str(point.get("scope_item_id", ""))].append(point)
+    return grouped
+
+
+def render_requirement_analysis_markdown(payload: dict[str, Any], title: str = "") -> str:
+    normalized_payload = _normalize_analysis_payload(payload, title=title)
+    source_title = _clean_text(title) or _clean_text(normalized_payload.get("meta", {}).get("source_title")) or "未命名需求"
+    terms = normalized_payload.get("terms", [])
+    scope_items = normalized_payload.get("scope_items", [])
+    test_points = normalized_payload.get("test_points", [])
+    traceability = normalized_payload.get("traceability", [])
+    coverage_check = normalized_payload.get("coverage_check", {})
+    consistency_check = normalized_payload.get("consistency_check", {})
+    gaps = _normalize_string_list(normalized_payload.get("gaps"), limit=10)
+
+    points_by_scope = _group_points_by_scope(test_points)
+    traceability_map = {
+        str(row.get("scope_item_id", "")): _normalize_source_refs(row.get("source_refs"), limit=8)
+        for row in traceability
+        if isinstance(row, dict)
+    }
+
+    lines = [f"# 测试需求分析 - {source_title}", ""]
+
+    lines.extend(["## 0. 术语与缩写", ""])
+    if terms:
+        term_rows = [
+            [
+                row.get("term", ""),
+                row.get("meaning", ""),
+                _join_refs(row.get("source_refs"), fallback="需求原文"),
+            ]
+            for row in terms
+            if isinstance(row, dict)
+        ]
+        lines.append(_markdown_table(["术语", "本需求中的含义", "需求来源"], term_rows))
+    else:
+        lines.append("- 暂未识别需要统一口径的术语，建议评审时补充。")
+    lines.append("")
+
+    lines.extend(["## 1. 测试范围", ""])
+    if scope_items:
+        scope_rows = []
+        for index, scope_item in enumerate(scope_items, start=1):
+            if not isinstance(scope_item, dict):
+                continue
+            scope_rows.append(
+                [
+                    f"F-{index:02d}",
+                    scope_item.get("name", ""),
+                    _join_refs(scope_item.get("source_refs"), fallback="需求原文"),
+                    scope_item.get("priority", "P2"),
+                    "是" if bool(scope_item.get("testable", True)) else "否",
+                    scope_item.get("notes", "") or scope_item.get("rule_summary", ""),
+                ]
+            )
+        lines.append(_markdown_table(["序号", "功能点", "需求来源", "优先级", "可测性", "备注"], scope_rows))
+    else:
+        lines.append("- 暂无可落地的测试范围，请先补充原始需求。")
+    lines.append("")
+
+    lines.extend(["## 2. 测试点", "", "### 一、功能点穷尽清单（按维度遍历）", ""])
+    for dimension in ANALYSIS_DIMENSIONS:
+        dimension_rows = [
+            scope_item
+            for scope_item in scope_items
+            if isinstance(scope_item, dict) and _clean_text(scope_item.get("dimension")) == dimension
+        ]
+        if not dimension_rows:
+            continue
+        lines.extend([f"#### {dimension}"])
+        table_rows = []
+        for scope_item in dimension_rows:
+            scope_id = str(scope_item.get("id", ""))
+            related_points = points_by_scope.get(scope_id, [])
+            verification_parts = [
+                scope_item.get("rule_summary", ""),
+                f"入口：{scope_item.get('page_or_entry', '需求原文')}",
+            ]
+            if _clean_text(scope_item.get("role")):
+                verification_parts.append(f"角色：{scope_item.get('role')}")
+            user_scene_flag = "是" if any(bool(point.get("user_scenario")) for point in related_points) else "否"
+            table_rows.append(
+                [
+                    scope_item.get("name", ""),
+                    "；".join(_dedupe([_clean_text(part) for part in verification_parts if _clean_text(part)])),
+                    _join_refs(traceability_map.get(scope_id) or scope_item.get("source_refs"), fallback="需求原文"),
+                    user_scene_flag,
+                ]
+            )
+        lines.append(_markdown_table(["功能点", "测试关注点", "对应需求", "真实用户场景"], table_rows))
+        lines.append("")
+
+    lines.extend(["### 一（补）、真实用户使用场景补充", ""])
+    scene_rows: list[list[Any]] = []
+    scene_order = {tag: index for index, tag in enumerate(REAL_USER_SCENE_TAGS)}
+    user_scene_points = [
+        point
+        for point in test_points
+        if isinstance(point, dict) and (bool(point.get("user_scenario")) or _clean_text(point.get("user_scenario_tag")))
+    ]
+    user_scene_points.sort(
+        key=lambda point: (
+            scene_order.get(_clean_text(point.get("user_scenario_tag")), 99),
+            _clean_text(point.get("module")),
+            _clean_text(point.get("title")),
+        )
+    )
+    for point in user_scene_points:
+        scene_rows.append(
+            [
+                _clean_text(point.get("user_scenario_tag")) or "真实用户场景",
+                point.get("title", ""),
+                point.get("module", "") or point.get("page_or_entry", "") or "需求原文",
+                "是",
+            ]
+        )
+    if scene_rows:
+        lines.append(_markdown_table(["场景类型", "测试关注点", "对应功能", "真实用户场景"], scene_rows))
+    else:
+        lines.append("- 暂未识别真实用户场景，建议补充误操作、重复操作、中断恢复、弱网、输入粘贴、多端等场景。")
+    lines.append("")
+
+    lines.extend(["## 3. 需求疑义与遗漏", ""])
+    pending_items: list[str] = []
+    pending_items.extend(gaps)
+    for term in _normalize_string_list(consistency_check.get("ambiguous_terms"), limit=6):
+        pending_items.append(f"术语“{term}”当前口径不够明确，建议产品/研发统一定义。")
+    for phrase in _normalize_string_list(consistency_check.get("fuzzy_phrases"), limit=6):
+        pending_items.append(f"原文存在模糊表述“{phrase}”，建议补充明确规则、范围或阈值。")
+    pending_items = _dedupe([item for item in pending_items if _clean_text(item)])
+    if pending_items:
+        for item in pending_items:
+            lines.append(f"- [ ] {item}")
+    else:
+        lines.append("- [x] 暂未识别影响后续计划和用例设计的关键疑义。")
+    lines.append("")
+
+    lines.extend(["## 4. 需求追溯", ""])
+    trace_rows: list[list[Any]] = []
+    for scope_item in scope_items:
+        if not isinstance(scope_item, dict):
+            continue
+        trace_rows.append(
+            [
+                scope_item.get("name", ""),
+                _join_refs(traceability_map.get(str(scope_item.get("id", ""))) or scope_item.get("source_refs"), fallback="需求原文"),
+            ]
+        )
+    if trace_rows:
+        lines.append(_markdown_table(["功能点/测试点", "需求来源"], trace_rows))
+    else:
+        lines.append("- 暂无可追溯项。")
+    lines.append("")
+
+    lines.extend(["## 5. 自检", ""])
+    coverage_items = [
+        ("角色/用户", coverage_check.get("roles")),
+        ("页面/入口", coverage_check.get("pages_entries")),
+        ("操作/动作", coverage_check.get("actions")),
+        ("接口/数据", coverage_check.get("data_fields")),
+        ("状态/流程", coverage_check.get("states_flows")),
+        ("规则/约束", coverage_check.get("rules_constraints")),
+        ("非功能", coverage_check.get("non_functional")),
+        ("关联/依赖", coverage_check.get("dependencies")),
+        ("隐性需求/界面状态", coverage_check.get("implicit_states")),
+    ]
+    coverage_status_label = {
+        "covered": "已覆盖",
+        "partial": "部分覆盖",
+        "missing": "未覆盖/未说明",
+    }
+    for label, status in coverage_items:
+        checked = "x" if status == "covered" else " "
+        status_text = coverage_status_label.get(_clean_text(status), "未覆盖/未说明")
+        lines.append(f"- [{checked}] {label}：{status_text}")
+    understanding_items = _normalize_string_list(consistency_check.get("my_understanding"), limit=4)
+    for item in understanding_items:
+        lines.append(f"- [x] 理解一致性检查：{item}")
+
+    return "\n".join(lines).strip()
 
 
 def analyze_requirement(content: str, title: str = "", use_llm: bool = False) -> list[str]:

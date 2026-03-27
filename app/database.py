@@ -38,7 +38,7 @@ SessionLocal = sessionmaker(
 class Base(DeclarativeBase):
     pass
 
-
+# app/database.py
 def ensure_application_schema() -> None:
     inspector = inspect(engine)
 
@@ -61,6 +61,17 @@ def ensure_application_schema() -> None:
     else:
         missing_requirement_columns = []
 
+    if "test_suites" in existing_tables:
+        suite_columns = {column["name"] for column in inspector.get_columns("test_suites")}
+        suite_column_map = {
+            "is_archived": "ALTER TABLE test_suites ADD COLUMN is_archived BOOLEAN DEFAULT 0 NOT NULL",
+        }
+        suite_additions = [
+            ddl for name, ddl in suite_column_map.items() if name not in suite_columns
+        ]
+    else:
+        suite_additions = []
+
     if "test_cases" in existing_tables:
         testcase_columns = {column["name"] for column in inspector.get_columns("test_cases")}
         testcase_additions = {
@@ -73,6 +84,8 @@ def ensure_application_schema() -> None:
             "locked": "ALTER TABLE test_cases ADD COLUMN locked BOOLEAN DEFAULT 0 NOT NULL",
             "source_version": "ALTER TABLE test_cases ADD COLUMN source_version VARCHAR(50)",
             "locked_case_data": "ALTER TABLE test_cases ADD COLUMN locked_case_data JSON",
+            "last_editor": "ALTER TABLE test_cases ADD COLUMN last_editor VARCHAR(100)",
+            "is_archived": "ALTER TABLE test_cases ADD COLUMN is_archived BOOLEAN DEFAULT 0 NOT NULL",
             "updated_at": "ALTER TABLE test_cases ADD COLUMN updated_at DATETIME",
         }
         missing_testcase_columns = [
@@ -81,15 +94,50 @@ def ensure_application_schema() -> None:
     else:
         missing_testcase_columns = []
 
+    if "test_workflows" in existing_tables:
+        workflow_columns =  {column["name"] for column in inspector.get_columns("test_workflows")}
+        workflow_additions = {
+
+            "requirement_id": "ALTER TABLE test_workflows ADD COLUMN requirement_id INTEGER REFERENCES requirements(id)",
+            "output_base_path": "ALTER TABLE test_workflows ADD COLUMN output_base_path VARCHAR(500)",
+            "confirmed_stage": "ALTER TABLE test_workflows ADD COLUMN confirmed_stage VARCHAR(30)",
+            "started_at": "ALTER TABLE test_workflows ADD COLUMN started_at DATETIME",
+            "updated_at": "ALTER TABLE test_workflows ADD COLUMN updated_at DATETIME",
+            "completed_at": "ALTER TABLE test_workflows ADD COLUMN completed_at DATETIME",
+            "workflow_version": "ALTER TABLE test_workflows ADD COLUMN workflow_version VARCHAR(20)",
+            "source_type": "ALTER TABLE test_workflows ADD COLUMN source_type VARCHAR(50)",
+            "source_meta": "ALTER TABLE test_workflows ADD COLUMN source_meta JSON",
+        }
+        missing_workflow_columns = [
+            ddl for name, ddl in workflow_additions.items() if name not in workflow_columns
+        ]
+    else:
+        missing_workflow_columns = []
+
+    if "test_plan_cases" in existing_tables:
+        test_plan_case_columns = {column["name"] for column in inspector.get_columns("test_plan_cases")}
+        test_plan_case_additions = {
+            "actual_result": "ALTER TABLE test_plan_cases ADD COLUMN actual_result TEXT",
+            "expected_result_snapshot": "ALTER TABLE test_plan_cases ADD COLUMN expected_result_snapshot TEXT",
+            "environment_info": "ALTER TABLE test_plan_cases ADD COLUMN environment_info TEXT",
+            "attachments": "ALTER TABLE test_plan_cases ADD COLUMN attachments JSON",
+        }
+        missing_test_plan_case_columns = [
+            ddl for name, ddl in test_plan_case_additions.items() if name not in test_plan_case_columns
+        ]
+    else:
+        missing_test_plan_case_columns = []
+
     with engine.begin() as connection:
-        for ddl in (*missing_requirement_columns, *missing_testcase_columns):
+        for ddl in (
+            *missing_requirement_columns,
+            *suite_additions,
+            *missing_testcase_columns,
+            *missing_workflow_columns,
+            *missing_test_plan_case_columns,
+        ):
             connection.execute(text(ddl))
 
-    if "test_workflows" in existing_tables:
-        wf_columns = {col["name"] for col in inspector.get_columns("test_workflows")}
-        if "requirement_id" not in wf_columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE test_workflows ADD COLUMN requirement_id INTEGER REFERENCES requirements(id)"))
 
     from app.models import RequirementReviewPoint, TestWorkflow, WorkflowStage
 

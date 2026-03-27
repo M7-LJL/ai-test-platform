@@ -2,20 +2,46 @@
 
 {% block title %}新建需求{% endblock %}
 
+{% block extra_head %}
+<style>
+    .upload-dropzone {
+        margin: 10px 0 12px;
+        padding: 18px;
+        border: 1.5px dashed #c7d2fe;
+        border-radius: 16px;
+        background: #f8faff;
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    }
+    .upload-dropzone.is-dragging {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        transform: translateY(-1px);
+    }
+    .upload-dropzone-title {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 700;
+        color: #312e81;
+    }
+    .upload-dropzone-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+    .upload-inline-note {
+        margin-top: 8px;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card">
     <h1>新建需求</h1>
     <p class="muted">上传 Markdown 需求文档或直接粘贴正文，系统会自动创建需求分析并进入 <strong>AI 测试工作流</strong>。</p>
-    <div class="info-panel" style="margin-top: 16px;">
-        <h3>提交后将自动进入测试工作流</h3>
-        <ul class="dense-list">
-            <li><strong>测试大纲</strong>：AI 根据需求内容生成测试大纲。</li>
-            <li><strong>需求分析</strong>：按角色、页面、动作、数据、流程、规则等维度深入分析。</li>
-            <li><strong>用例编写</strong>：生成包含正常、边界、异常和真实用户场景的测试用例。</li>
-            <li><strong>缺陷报告</strong>：支持粘贴执行结果，AI 生成缺陷报告。</li>
-            <li><strong>测试报告</strong>：汇总所有阶段产出，AI 生成最终测试报告。</li>
-        </ul>
-    </div>
 
     <div class="page-actions">
         <a class="btn btn-secondary" href="/projects">返回项目列表</a>
@@ -45,21 +71,39 @@
         </select>
 
         <label>上传需求文件</label>
-        <input id="markdown_file" name="markdown_file" type="file" accept=".md,.markdown,.txt,.html,text/markdown,text/plain,text/html" style="display: none;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-            <button type="button" class="btn btn-secondary" id="file-pick-btn" style="flex-shrink: 0;">选择文件</button>
-            <span id="selected-file-name" class="muted">
-                {% if form_data.get('markdown_filename_text') %}
-                已选择文件：{{ form_data.get('markdown_filename_text') }}
-                {% else %}
-                未选择任何文件
-                {% endif %}
-            </span>
+        <input
+            id="markdown_file"
+            name="markdown_file"
+            type="file"
+            accept=".md,.markdown,.txt,.html,text/markdown,text/plain,text/html"
+            style="margin-bottom: 8px;"
+        >
+        <div class="upload-dropzone" id="upload-dropzone">
+            <p class="upload-dropzone-title">也可以直接把文件拖到这里</p>
+            <div class="upload-dropzone-actions">
+                <button type="button" class="btn btn-secondary" id="paste-from-clipboard-btn">从剪贴板粘贴正文</button>
+            </div>
+            <div class="upload-inline-note" id="upload-channel-hint">支持拖拽文件或直接粘贴正文。</div>
+        </div>
+        <div id="selected-file-name" class="muted" style="margin-bottom: 8px;">
+            {% if form_data.get('markdown_filename_text') %}
+            已选择文件：{{ form_data.get('markdown_filename_text') }}
+            {% else %}
+            未选择任何文件
+            {% endif %}
         </div>
         <div id="selected-file-meta" class="muted" style="margin-top: -8px; margin-bottom: 12px;"></div>
-
         <input type="hidden" id="markdown_filename_text" name="markdown_filename_text" value="{{ form_data.get('markdown_filename_text', '') }}">
         <input type="hidden" id="markdown_content_text" name="markdown_content_text" value="{{ form_data.get('markdown_content_text', '') }}">
+
+        <label for="source_url" style="margin-top: 20px;">需求来源 URL（可选）</label>
+        <input
+            id="source_url"
+            name="source_url"
+            type="url"
+            value="{{ form_data.get('source_url', '') }}"
+            placeholder="例如：https://example.com/prd/123"
+        >
 
         <label for="fallback_content" style="margin-top: 20px;">兜底正文输入</label>
         <textarea
@@ -68,10 +112,6 @@
             rows="12"
             placeholder="如果本地 Markdown 文件有问题，可以直接把需求正文粘贴到这里。"
         >{{ form_data.get('fallback_content', '') }}</textarea>
-
-        <div id="selected-input-source" class="muted" style="margin-top: 8px;">
-            系统优先使用上传文件内容；如果文件为空，则自动使用你粘贴的正文。当前 MVP 优先适配 Markdown/文本，HTML 需求可先上传或粘贴源码继续分析。
-        </div>
 
         <div class="page-actions" style="margin-top: 20px;">
             <button class="btn" type="submit">创建需求并进入测试工作流</button>
@@ -86,39 +126,103 @@
     const fileMetaHint = document.getElementById("selected-file-meta");
     const hiddenName = document.getElementById("markdown_filename_text");
     const hiddenContent = document.getElementById("markdown_content_text");
+    const dropzone = document.getElementById("upload-dropzone");
+    const fallbackContent = document.getElementById("fallback_content");
+    const inputSourceHint = document.getElementById("selected-input-source");
+    const uploadChannelHint = document.getElementById("upload-channel-hint");
+    const pasteBtn = document.getElementById("paste-from-clipboard-btn");
 
-    const pickBtn = document.getElementById("file-pick-btn");
-
-    if (!fileInput || !pickBtn) {
+    if (!fileInput || !fileNameHint || !fileMetaHint || !hiddenName || !hiddenContent) {
         return;
     }
 
-    pickBtn.addEventListener("click", () => {
-        fileInput.click();
-    });
+    function setInputSourceMessage(message) {
+        if (inputSourceHint) {
+            inputSourceHint.textContent = message;
+        }
+    }
 
-    fileInput.addEventListener("change", async () => {
-        const file = fileInput.files && fileInput.files[0];
+    async function hydrateFromFile(file, sourceLabel) {
         if (!file) {
             fileNameHint.textContent = "未选择文件";
             fileMetaHint.textContent = "";
             hiddenName.value = "";
             hiddenContent.value = "";
-            return;
+            setInputSourceMessage("系统优先使用上传文件内容；如果文件为空，则自动使用你粘贴的正文。若正文来自在线文档，可额外填写 URL，workflow 会保存来源信息用于追溯。");
+            return false;
         }
 
         fileNameHint.textContent = `已选择文件：${file.name}`;
-        fileMetaHint.textContent = `文件大小：${Math.ceil(file.size / 1024)} KB`;
+        fileMetaHint.textContent = `${sourceLabel}，文件大小：${Math.ceil(file.size / 1024)} KB`;
         hiddenName.value = file.name;
 
         try {
             const text = await file.text();
             hiddenContent.value = text || "";
+            setInputSourceMessage(`当前将优先使用${sourceLabel}内容：${file.name}。如果你继续编辑下方正文，只有在文件内容为空时才会回退使用正文。`);
+            if (uploadChannelHint) {
+                uploadChannelHint.textContent = `已接收${sourceLabel}：${file.name}`;
+            }
+            return true;
         } catch (error) {
             hiddenContent.value = "";
             fileMetaHint.textContent = "文件读取失败，可直接粘贴正文继续。";
+            if (uploadChannelHint) {
+                uploadChannelHint.textContent = "文件读取失败，请改用拖拽其他文本文件，或直接粘贴正文。";
+            }
+            return false;
         }
+    }
+
+    fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        await hydrateFromFile(file, "本地文件");
     });
+
+    if (dropzone) {
+        ["dragenter", "dragover"].forEach(eventName => {
+            dropzone.addEventListener(eventName, event => {
+                event.preventDefault();
+                dropzone.classList.add("is-dragging");
+            });
+        });
+
+        ["dragleave", "dragend", "drop"].forEach(eventName => {
+            dropzone.addEventListener(eventName, event => {
+                event.preventDefault();
+                dropzone.classList.remove("is-dragging");
+            });
+        });
+
+        dropzone.addEventListener("drop", async event => {
+            const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+            await hydrateFromFile(file, "拖拽文件");
+        });
+    }
+
+    if (pasteBtn && fallbackContent) {
+        pasteBtn.addEventListener("click", async () => {
+            if (!navigator.clipboard || !navigator.clipboard.readText) {
+                fileMetaHint.textContent = "当前浏览器不支持直接读取剪贴板，请手动粘贴到下方正文输入框。";
+                return;
+            }
+            try {
+                const text = await navigator.clipboard.readText();
+                if (!text) {
+                    fileMetaHint.textContent = "剪贴板当前没有可用文本，请先复制需求正文。";
+                    return;
+                }
+                fallbackContent.value = text;
+                fileMetaHint.textContent = `已从剪贴板写入正文，共 ${text.length} 个字符。`;
+                setInputSourceMessage("你已把剪贴板正文写入下方输入框。若未上传文件，提交时会直接使用这段正文。");
+                if (uploadChannelHint) {
+                    uploadChannelHint.textContent = "已从剪贴板导入正文，可直接提交。";
+                }
+            } catch (error) {
+                fileMetaHint.textContent = "读取剪贴板失败，请手动粘贴到下方正文输入框。";
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}

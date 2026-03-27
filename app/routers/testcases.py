@@ -11,10 +11,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Requirement, TestCase
+from app.models import Project, Requirement, TestCase, TestSuite
 from app.services.xmind_markdown_service import (
     CASE_TYPE_PRIORITY,
-    generate_structured_cases,
     parse_xmind_markdown,
     render_case_from_locked_data,
 )
@@ -71,6 +70,15 @@ def _normalized_title(value: str) -> str:
 
 def _clean_text(value: str) -> str:
     return " ".join((value or "").replace("\u3000", " ").split()).strip()
+
+
+def _parse_int_list(raw_values: str) -> list[int]:
+    values: list[int] = []
+    for raw in (raw_values or "").split(","):
+        candidate = raw.strip()
+        if candidate.isdigit():
+            values.append(int(candidate))
+    return values
 
 
 def _split_multiline_lines(value: str) -> list[str]:
@@ -261,6 +269,7 @@ def _sync_requirement_cases(
     *,
     source: str,
     mode: str,
+    replaceable_sources: set[str] | None = None,
 ) -> dict[str, int]:
     existing_cases = (
         db.query(TestCase)
@@ -280,6 +289,8 @@ def _sync_requirement_cases(
     if mode == "overwrite":
         for testcase in existing_cases:
             if testcase.locked or testcase.manually_edited:
+                continue
+            if replaceable_sources is not None and testcase.source not in replaceable_sources:
                 continue
             db.delete(testcase)
             deleted_count += 1
@@ -315,6 +326,108 @@ def _sync_requirement_cases(
         }
     )
     return impact
+
+
+@router.get("/testcases", name="testcase_list")
+def list_testcases_page(
+    request: Request,
+    project_id: str = Query(default=""),
+    requirement_id: str = Query(default=""),
+    status: str = Query(default=""),
+    keyword: str = Query(default=""),
+    db: Session = Depends(get_db),
+):
+    selected_project_id = int(project_id) if project_id.strip().isdigit() else None
+    selected_requirement_id = int(requirement_id) if requirement_id.strip().isdigit() else None
+
+    query = (
+        db.query(TestCase)
+        .options(
+            joinedload(TestCase.project),
+            joinedload(TestCase.requirement),
+            joinedload(TestCase.suite),
+        )
+        .filter(TestCase.is_archived.is_(False))
+        .order_by(TestCase.updated_at.desc(), TestCase.created_at.desc())
+    )
+
+    if selected_project_id is not None:
+        query = query.filter(TestCase.project_id == selected_project_id)
+    if selected_requirement_id is not None:
+        query = query.filter(TestCase.requirement_id == selected_requirement_id)
+    if status.strip():
+        query = query.filter(TestCase.status == status.strip())
+    if keyword.strip():
+        like_pattern = f"%{keyword.strip()}%"
+        query = query.filter(
+            (TestCase.title.ilike(like_pattern))
+            | (TestCase.case_id.ilike(like_pattern))
+            | (TestCase.module.ilike(like_pattern))
+        )
+
+    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    requirements_query = db.query(Requirement).options(joinedload(Requirement.project))
+    if selected_project_id is not None:
+        requirements_query = requirements_query.filter(Requirement.project_id == selected_project_id)
+    requirements = requirements_query.order_by(Requirement.created_at.desc()).all()
+
+    return templates.TemplateResponse(
+        request,
+        "testcases/list.html",
+        {
+            "request": request,
+            "testcases": query.all(),
+            "projects": projects,
+            "requirements": requirements,
+            "selected_project_id": selected_project_id,
+            "selected_requirement_id": selected_requirement_id,
+            "selected_status": status.strip(),
+            "keyword": keyword.strip(),
+        },
+    )
+
+
+@router.post("/test-suites/create", name="create_test_suite")
+def create_test_suite(
+    project_id: int = Form(...),
+    name: str = Form(...),
+    description: str = Form(default=""),
+    redirect_to: str = Form(default="/testcases"),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    suite_name = _clean_text(name)
+    if not suite_name:
+        raise HTTPException(status_code=400, detail="Suite name is required.")
+
+    duplicated_suite = (
+        db.query(TestSuite)
+        .filter(TestSuite.project_id == project_id, TestSuite.name == suite_name)
+        .first()
+    )
+    if duplicated_suite is not None:
+        if duplicated_suite.is_archived:
+            duplicated_suite.is_archived = False
+            duplicated_suite.description = description.strip() or duplicated_suite.description
+            db.commit()
+            safe_redirect = redirect_to.strip() or "/testcases"
+            return RedirectResponse(url=safe_redirect, status_code=303)
+        raise HTTPException(status_code=400, detail="Suite name already exists in current project.")
+
+    suite = TestSuite(
+        project_id=project_id,
+        name=suite_name,
+        description=description.strip() or None,
+        is_archived=False,
+    )
+    db.add(suite)
+    db.commit()
+
+    safe_redirect = redirect_to.strip() or "/testcases"
+    return RedirectResponse(url=safe_redirect, status_code=303)
 
 
 @router.get("/testcases/import-markdown", name="import_testcases_markdown")
@@ -407,13 +520,32 @@ def edit_testcase_page(testcase_id: int, request: Request, db: Session = Depends
             }
         )
     )
-    return templates.TemplateResponse(request, "testcases/edit.html", {"request": request, "testcase": testcase})
+    suites = (
+        db.query(TestSuite)
+        .filter(
+            TestSuite.project_id == testcase.project_id,
+            TestSuite.is_archived.is_(False),
+        )
+        .order_by(TestSuite.created_at.desc())
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "testcases/edit.html",
+        {
+            "request": request,
+            "testcase": testcase,
+            "suites": suites,
+        },
+    )
 
 
 @router.post("/testcases/{testcase_id}/edit", name="submit_edit_testcase")
 def submit_edit_testcase(
     testcase_id: int,
     title: str = Form(default=""),
+    suite_id: str = Form(default=""),
     module: str = Form(default=""),
     priority: str = Form(default="P2"),
     case_type: str = Form(default="正向"),
@@ -449,6 +581,23 @@ def submit_edit_testcase(
     requirement = None
     if testcase.requirement_id is not None:
         requirement = db.query(Requirement).filter(Requirement.id == testcase.requirement_id).first()
+
+    normalized_suite_id = int(suite_id) if suite_id.strip().isdigit() else None
+    if normalized_suite_id is not None:
+        suite = (
+            db.query(TestSuite)
+            .filter(
+                TestSuite.id == normalized_suite_id,
+                TestSuite.project_id == testcase.project_id,
+                TestSuite.is_archived.is_(False),
+            )
+            .first()
+        )
+        if suite is None:
+            raise HTTPException(status_code=400, detail="Invalid suite for current project.")
+        testcase.suite_id = suite.id
+    else:
+        testcase.suite_id = None
 
     structured_payload = _extract_locked_case_form_payload(
         scene_name=scene_name or title,
@@ -514,6 +663,7 @@ def submit_edit_testcase(
     testcase.manually_edited = True
     testcase.source = "manual_edit"
     testcase.review_status = "reviewed"
+    testcase.last_editor = "手工编辑"
     testcase.updated_at = datetime.utcnow()
     db.commit()
 
@@ -521,47 +671,3 @@ def submit_edit_testcase(
     if redirect_requirement_id is not None:
         return RedirectResponse(url=f"/requirements/{redirect_requirement_id}?edited=1", status_code=303)
     return RedirectResponse(url="/projects", status_code=303)
-
-
-@router.post("/testcases/generate-from-requirement/{requirement_id}", name="generate_testcases")
-def generate_testcases_from_requirement(
-    requirement_id: int,
-    generate_mode: str = Form(default="overwrite"),
-    db: Session = Depends(get_db),
-):
-    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
-    if requirement is None:
-        raise HTTPException(status_code=404, detail="Requirement not found.")
-
-    if requirement.analysis_status not in {"reviewed", "ready_for_execution"}:
-        return RedirectResponse(
-            url=f"/requirements/{requirement_id}?review_required=1",
-            status_code=303,
-        )
-
-    structured_cases = generate_structured_cases(
-        requirement.title,
-        requirement.content,
-        analysis_payload=requirement.analysis_payload,
-    )
-    normalized_mode = generate_mode if generate_mode in {"overwrite", "append"} else "overwrite"
-    impact = _sync_requirement_cases(
-        db,
-        requirement,
-        structured_cases,
-        source="ai_generated",
-        mode=normalized_mode,
-    )
-
-    requirement.analysis_status = "ready_for_execution"
-    _append_requirement_tool_result(
-        requirement,
-        "AI 生成用例",
-        f"已按{'覆盖生成' if normalized_mode == 'overwrite' else '仅补充新增'}生成 {impact['created']} 条测试用例，保留 {impact['protected']} 条受保护用例。",
-    )
-    db.commit()
-
-    return RedirectResponse(
-        url=f"/requirements/{requirement_id}?generated={impact['created']}",
-        status_code=303,
-    )

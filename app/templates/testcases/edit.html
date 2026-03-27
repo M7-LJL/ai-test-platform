@@ -21,7 +21,15 @@
     <form method="post" action="/testcases/{{ testcase.id }}/edit">
         <label for="title">标题</label>
         <input id="title" name="title" type="text" value="{{ testcase.title }}">
-
+        <label for="suite_id">套件</label>
+        <select id="suite_id" name="suite_id">
+            <option value="">不指定套件</option>
+            {% for suite in suites %}
+            <option value="{{ suite.id }}" {% if testcase.suite_id == suite.id %}selected{% endif %}>
+                {{ suite.name }}
+            </option>
+            {% endfor %}
+        </select>
         <label for="module">模块</label>
         <input id="module" name="module" type="text" value="{{ testcase.module or '' }}">
 

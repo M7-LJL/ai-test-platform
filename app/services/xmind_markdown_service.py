@@ -21,6 +21,12 @@ CATEGORY_CASE_TYPE_MAP = {
     "boundary": "边界条件",
     "exception": "异常场景",
 }
+README_CASE_TYPE_MAP = {
+    "功能测试": "正常流程",
+    "异常测试": "异常场景",
+    "边界测试": "边界条件",
+    "真实用户场景": "正常流程",
+}
 
 DOMAIN_BUSINESS_LINE_HINTS = (
     "洗衣",
@@ -504,48 +510,29 @@ def _infer_business_object(sentence: str) -> str:
     return " / ".join(hits[:3])
 
 
+def _compact_case_phrase(text: str, fallback: str = "未命名场景") -> str:
+    cleaned = _clean_text(re.sub(r"^(验证|校验|检查|确认)", "", text))
+    cleaned = re.sub(r"[，。；;].*$", "", cleaned).strip()
+    cleaned = re.sub(r"(主流程)?(正确|通过|成功)$", "", cleaned).strip()
+    cleaned = re.sub(r"(页面反馈|状态流转|结果数据|结果展示).*$", "", cleaned).strip()
+    cleaned = cleaned.strip("-:： ")
+    return cleaned or fallback
+
+
 def _scene_name_for_card(sentence: str, card_kind: str) -> str:
-    base = _clean_text(re.sub(r"^验证", "", sentence)) or "未命名场景"
+    base = _compact_case_phrase(sentence)
     suffix_map = {
         "main": "",
-        "boundary": "边界校验",
-        "exception": "异常处理",
-        "config": "配置生效",
+        "boundary": "边界",
+        "exception": "异常",
+        "config": "配置",
     }
     suffix = suffix_map.get(card_kind, "")
     return f"{base} - {suffix}" if suffix and suffix not in base else base
 
 
 def _expand_design_cards(item: dict[str, str]) -> list[dict[str, Any]]:
-    sentence = item["sentence"]
-    case_type = item["case_type"]
-
-    has_boundary = any(keyword in sentence for keyword in BOUNDARY_HINTS)
-    has_exception = any(keyword in sentence for keyword in EXCEPTION_HINTS)
-    has_config = any(keyword in sentence for keyword in CONFIG_HINTS)
-
-    cards: list[dict[str, Any]] = [{**item, "card_kind": "main", "render_case_type": case_type}]
-
-    if case_type != "边界条件" and has_boundary:
-        cards.append({**item, "card_kind": "boundary", "render_case_type": "边界条件"})
-    if case_type != "异常场景" and has_exception:
-        cards.append({**item, "card_kind": "exception", "render_case_type": "异常场景"})
-    if case_type == "正常流程" and has_config and not has_boundary:
-        cards.append({**item, "card_kind": "config", "render_case_type": "边界条件"})
-
-    deduped_cards: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for card in cards:
-        key = (
-            _clean_text(card["module"]),
-            _clean_text(card["sentence"]),
-            _clean_text(card["card_kind"]),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped_cards.append(card)
-    return deduped_cards[:4]
+    return [{**item, "card_kind": "main", "render_case_type": item["case_type"]}]
 
 
 def build_locked_case_data_from_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -651,39 +638,32 @@ def render_case_from_locked_data(
 ) -> dict[str, str]:
     data = _normalize_locked_case_data(locked_case_data)
 
-    title = data["scene_name"] or data["action"] or module or "未命名场景"
+    title = _compact_case_phrase(data["scene_name"] or data["action"] or module or "未命名场景")
 
     preconditions_parts: list[str] = []
+    if data["entry"]:
+        preconditions_parts.append(f"进入{data['entry']}")
     if data["user_type"]:
-        preconditions_parts.append(f"{data['user_type']}账号可用于当前场景")
-    if data["business_line"]:
-        preconditions_parts.append(f"业务线：{data['business_line']}")
-    if data["scenario_type"]:
-        preconditions_parts.append(f"场景：{data['scenario_type']}")
-    if data["channel"]:
-        preconditions_parts.append(f"渠道：{data['channel']}")
-    if data["device_type"]:
-        preconditions_parts.append(f"设备：{data['device_type']}")
-    if data["payment_method"]:
-        preconditions_parts.append(f"支付方式：{data['payment_method']}")
-    if data["business_object"]:
-        preconditions_parts.append(f"目标对象：{data['business_object']}")
+        preconditions_parts.append(f"{data['user_type']}账号可用")
     preconditions_parts.extend(data["preconditions"])
     preconditions_parts.extend(data["config_conditions"])
-    preconditions = "；".join(_dedupe(preconditions_parts)) + "。" if preconditions_parts else "基础测试数据已准备完成。"
+    deduped_preconditions = _dedupe(preconditions_parts)[:3]
+    preconditions = "；".join(deduped_preconditions) if deduped_preconditions else "已具备基础测试数据和权限"
 
     steps: list[str] = []
-    steps.append(f"进入{data['entry']}。" if data["entry"] else "进入当前业务场景对应入口。")
-    steps.append(f"执行：{data['action']}。" if data["action"] else "执行当前场景对应的核心业务操作。")
+    if data["entry"]:
+        steps.append(f"进入{data['entry']}")
+    else:
+        steps.append("进入目标页面")
+    steps.append(f"执行{_compact_case_phrase(data['action'], title)}" if data["action"] else f"执行{title}")
 
     if case_type == "边界条件" and data["boundary_conditions"]:
-        steps.append(f"重点覆盖边界：{'；'.join(data['boundary_conditions'])}。")
+        steps.append(f"使用边界数据执行，覆盖{_compact_case_phrase(data['boundary_conditions'][0], '边界场景')}")
     elif case_type == "异常场景" and data["exception_handling"]:
-        steps.append(f"重点覆盖异常：{'；'.join(data['exception_handling'])}。")
+        steps.append(f"制造异常条件并执行，覆盖{_compact_case_phrase(data['exception_handling'][0], '异常场景')}")
     elif data["assertions"]:
-        steps.append(f"重点校验：{'；'.join(data['assertions'])}。")
-    else:
-        steps.append("观察页面反馈、状态流转和结果数据。")
+        steps.append(f"检查{_compact_case_phrase(data['assertions'][0], '结果展示')}")
+    steps.append("查看执行结果")
 
     expected_items = _dedupe(
         [
@@ -693,7 +673,20 @@ def render_case_from_locked_data(
             *(data["exception_handling"] if case_type == "异常场景" else []),
         ]
     )
-    expected = "；".join(expected_items) if expected_items else "结果符合需求预期。"
+    compact_expected = [_compact_case_phrase(item, "") for item in expected_items if _compact_case_phrase(item, "")]
+    expected = "；".join(compact_expected[:2]) if compact_expected else "结果符合预期"
+
+    test_data_parts = _dedupe(
+        [
+            data["user_type"],
+            data["scenario_type"],
+            data["channel"],
+            data["device_type"],
+            data["payment_method"],
+            data["business_object"],
+        ]
+    )
+    test_data = "，".join(test_data_parts[:3]) if test_data_parts else "基础测试数据"
 
     return {
         "module": module or section or "默认模块",
@@ -705,7 +698,7 @@ def render_case_from_locked_data(
         "preconditions": preconditions,
         "steps": "\n".join(f"{index}. {step}" for index, step in enumerate(steps, start=1)),
         "expected": expected,
-        "test_data": f"锁定字段渲染：{data['scene_name'] or data['action'] or '当前场景'}",
+        "test_data": test_data,
         "requirement_source": requirement_source,
         "status": "draft",
         "locked_case_data": data,
@@ -922,6 +915,7 @@ def parse_xmind_markdown(markdown: str) -> list[dict[str, str]]:
     current_case: dict[str, str] | None = None
     cases: list[dict[str, str]] = []
     in_steps = False
+    in_code_block = False
     step_lines: list[str] = []
 
     def flush_case() -> None:
@@ -960,6 +954,12 @@ def parse_xmind_markdown(markdown: str) -> list[dict[str, str]]:
         line = raw_line.rstrip()
         stripped = line.strip()
 
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
         if stripped.startswith("# "):
             flush_case()
             current_module = _clean_text(stripped[2:])
@@ -981,6 +981,11 @@ def parse_xmind_markdown(markdown: str) -> list[dict[str, str]]:
 
         if stripped.startswith("### "):
             heading = _clean_text(stripped[4:])
+            if heading in README_CASE_TYPE_MAP:
+                flush_case()
+                current_section = "README测试用例"
+                current_case_type = README_CASE_TYPE_MAP[heading]
+                continue
             if current_section == "README测试用例" or re.match(r"^TC[-_A-Z0-9]+", heading):
                 flush_case()
                 case_id_match = re.match(r"^(TC[-_A-Z0-9]+)\s+(.*)$", heading)
@@ -1017,6 +1022,20 @@ def parse_xmind_markdown(markdown: str) -> list[dict[str, str]]:
                 }
             continue
 
+        bullet_case_match = re.match(r"^-\s*\*\*(TC[-_A-Z0-9]+)?\s*(.*?)\*\*$", stripped)
+        if bullet_case_match:
+            flush_case()
+            case_id = _clean_text(bullet_case_match.group(1))
+            title = _clean_text(bullet_case_match.group(2))
+            current_case = {
+                "title": title or "未命名用例",
+                "module": current_module,
+                "case_type": current_case_type,
+            }
+            if case_id:
+                current_case["case_id"] = case_id
+            continue
+
         if current_case is None:
             continue
 
@@ -1027,8 +1046,9 @@ def parse_xmind_markdown(markdown: str) -> list[dict[str, str]]:
             step_lines = []
             continue
 
-        if in_steps and re.match(r"^\d+[.)]\s+", stripped):
-            step_lines.append(stripped)
+        if in_steps and re.match(r"^(?:-\s*)?\d+[.)]\s+", stripped):
+            normalized_step = re.sub(r"^-\s*", "", stripped)
+            step_lines.append(normalized_step)
             continue
 
         if field and field[0] in {"用例ID", "ID"}:

@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}首页总览{% endblock %}
+{% block page_title %}Web 测试总览{% endblock %}
+{% block page_subtitle %}把项目、需求、用例、执行和缺陷信息集中展示成后台首页。{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div class="hero-content">
+        <span class="eyebrow">MVP Dashboard</span>
+        <h1>你好，超级管理员</h1>
+        <p class="muted">
+            当前首页已经切成后台工作台风格，先把核心业务入口和关键指标收拢到一屏内。
+        </p>
+        <div class="hero-actions">
+            <a class="btn" href="/projects">进入项目管理</a>
+            <a class="btn btn-secondary" href="/requirements/new">新建需求</a>
+            <a class="btn btn-secondary" href="/testcases">查看用例中心</a>
+        </div>
+    </div>
+    <div class="hero-meta">
+        <div class="hero-meta-item">
+            <span class="metric-label">当前时间</span>
+            <strong>{{ today_label }}</strong>
+        </div>
+        <div class="hero-meta-item">
+            <span class="metric-label">执行覆盖</span>
+            <strong>{{ executed_total }}</strong>
+        </div>
+        <div class="hero-meta-item">
+            <span class="metric-label">完成率</span>
+            <strong>{{ completion_rate }}%</strong>
+        </div>
+        <div class="hero-meta-item">
+            <span class="metric-label">通过率</span>
+            <strong>{{ pass_rate }}%</strong>
+        </div>
+        <div class="hero-meta-item">
+            <span class="metric-label">最近执行</span>
+            <strong>{{ latest_execution_label }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-grid dashboard-grid-4">
+    <a class="quick-link-card quick-link-project" href="/projects">
+        <div class="quick-link-icon">P</div>
+        <div>
+            <strong>项目管理</strong>
+            <p class="muted">管理项目范围与报告输出</p>
+        </div>
+    </a>
+    <a class="quick-link-card quick-link-requirement" href="/requirements/new">
+        <div class="quick-link-icon">R</div>
+        <div>
+            <strong>需求工作流</strong>
+            <p class="muted">录入需求并推进分析流程</p>
+        </div>
+    </a>
+    <a class="quick-link-card quick-link-case" href="/testcases">
+        <div class="quick-link-icon">C</div>
+        <div>
+            <strong>用例中心</strong>
+            <p class="muted">统一筛选、编辑和归类用例</p>
+        </div>
+    </a>
+    <a class="quick-link-card quick-link-plan" href="/plans">
+        <div class="quick-link-icon">E</div>
+        <div>
+            <strong>执行中心</strong>
+            <p class="muted">查看计划进度与执行结果</p>
+        </div>
+    </a>
+</section>
+
+<section class="dashboard-metrics">
+    {% for item in metric_cards %}
+    <div class="dashboard-metric tone-{{ item.tone }}">
+        <div class="dashboard-metric-icon">{{ item.label[:1] }}</div>
+        <div>
+            <span class="metric-label">{{ item.label }}</span>
+            <strong class="metric-value">{{ item.value }}</strong>
+            <span class="metric-note">{{ item.note }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+
+<section class="dashboard-grid dashboard-grid-3">
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>新增趋势</h2>
+                <p class="muted">近 7 天需求和缺陷变化</p>
+            </div>
+        </div>
+        <div class="trend-chart" id="trend-chart" data-labels='{{ trend_labels | tojson }}' data-series-a='{{ requirement_trend | tojson }}' data-series-b='{{ defect_trend | tojson }}'>
+            <div class="chart-legend">
+                <span><i class="legend-dot is-blue"></i>需求新增</span>
+                <span><i class="legend-dot is-green"></i>缺陷新增</span>
+            </div>
+            <svg viewBox="0 0 680 280" class="trend-svg" aria-label="近7天趋势图">
+                <g class="grid-lines">
+                    <line x1="56" y1="36" x2="640" y2="36"></line>
+                    <line x1="56" y1="96" x2="640" y2="96"></line>
+                    <line x1="56" y1="156" x2="640" y2="156"></line>
+                    <line x1="56" y1="216" x2="640" y2="216"></line>
+                </g>
+                <polyline id="series-a" class="series-a" points=""></polyline>
+                <polyline id="series-b" class="series-b" points=""></polyline>
+                <g id="trend-points-a"></g>
+                <g id="trend-points-b"></g>
+                <g id="trend-labels"></g>
+            </svg>
+        </div>
+    </div>
+
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>工作流阶段</h2>
+                <p class="muted">当前流程停留位置</p>
+            </div>
+        </div>
+        <div class="progress-stack" style="margin-bottom: 18px;">
+            {% set workflow_total = workflow_distribution | sum(attribute='value') %}
+            {% for item in workflow_distribution %}
+            <div class="progress-item">
+                <div class="progress-meta">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ (item.value / workflow_total * 100) if workflow_total else 0 }}%;"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="donut-layout">
+            <div class="donut-chart" style="background: {{ workflow_gradient }};">
+                <div class="donut-core">
+                    <strong>{{ workflow_distribution | sum(attribute='value') }}</strong>
+                    <span>工作流</span>
+                </div>
+            </div>
+            <div class="donut-legend">
+                {% for item in workflow_distribution %}
+                <div class="legend-row">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>执行进度</h2>
+                <p class="muted">测试计划用例执行结果，已关联缺陷 {{ linked_execution_defect_count }} 条</p>
+            </div>
+        </div>
+        <div class="progress-stack" style="margin-bottom: 18px;">
+            {% set execution_total = execution_distribution | sum(attribute='value') %}
+            {% for item in execution_distribution %}
+            <div class="progress-item">
+                <div class="progress-meta">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ (item.value / execution_total * 100) if execution_total else 0 }}%;"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="donut-layout">
+            <div class="donut-chart" style="background: {{ execution_gradient }};">
+                <div class="donut-core">
+                    <strong>{{ plan_count }}</strong>
+                    <span>计划数</span>
+                </div>
+            </div>
+            <div class="donut-legend">
+                {% for item in execution_distribution %}
+                <div class="legend-row">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-grid dashboard-grid-3">
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>最近项目</h2>
+                <p class="muted">便于快速跳转业务上下文</p>
+            </div>
+            <a class="btn btn-secondary" href="/projects">查看全部</a>
+        </div>
+        <div class="dashboard-list">
+            {% for project in recent_projects %}
+            <a class="dashboard-list-item" href="/projects/{{ project.id }}">
+                <div>
+                    <strong>{{ project.name }}</strong>
+                    <p class="muted">{{ project.description or "暂无描述" }}</p>
+                </div>
+                <span class="list-meta">{{ project.created_at.strftime('%m-%d') }}</span>
+            </a>
+            {% else %}
+            <p class="muted">还没有项目，先去创建第一个项目。</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>最近计划</h2>
+                <p class="muted">跟进当前执行中的轮次</p>
+            </div>
+            <a class="btn btn-secondary" href="/plans">进入执行中心</a>
+        </div>
+        <div class="dashboard-list">
+            {% for plan in recent_plans %}
+            <a class="dashboard-list-item" href="/plans/{{ plan.id }}">
+                <div>
+                    <strong>{{ plan.name }}</strong>
+                    <p class="muted">{{ plan.project.name if plan.project else "未关联项目" }}</p>
+                </div>
+                <span class="tag">{{ plan.status }}</span>
+            </a>
+            {% else %}
+            <p class="muted">当前还没有测试计划。</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card dashboard-card">
+        <div class="section-heading">
+            <div>
+                <h2>最近缺陷</h2>
+                <p class="muted">快速看到新出现的问题</p>
+            </div>
+            <a class="btn btn-secondary" href="/defects">进入缺陷中心</a>
+        </div>
+        <div class="dashboard-list">
+            {% for defect in recent_defects %}
+            <a class="dashboard-list-item" href="/defects/{{ defect.id }}">
+                <div>
+                    <strong>{{ defect.title }}</strong>
+                    <p class="muted">{{ defect.project.name if defect.project else "未关联项目" }}</p>
+                </div>
+                <span class="tag tag-accent">{{ defect.status }}</span>
+            </a>
+            {% else %}
+            <p class="muted">当前没有缺陷记录。</p>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const container = document.getElementById("trend-chart");
+    if (!container) {
+        return;
+    }
+
+    const labels = JSON.parse(container.dataset.labels || "[]");
+    const seriesA = JSON.parse(container.dataset.seriesA || "[]");
+    const seriesB = JSON.parse(container.dataset.seriesB || "[]");
+    const svg = container.querySelector(".trend-svg");
+    const polylineA = document.getElementById("series-a");
+    const polylineB = document.getElementById("series-b");
+    const pointsA = document.getElementById("trend-points-a");
+    const pointsB = document.getElementById("trend-points-b");
+    const labelGroup = document.getElementById("trend-labels");
+
+    const width = 584;
+    const height = 180;
+    const startX = 56;
+    const startY = 36;
+    const maxValue = Math.max(1, ...seriesA, ...seriesB);
+    const stepX = labels.length > 1 ? width / (labels.length - 1) : 0;
+
+    function toPoint(value, index) {
+        const x = startX + stepX * index;
+        const y = startY + height - (value / maxValue) * height;
+        return [x, y];
+    }
+
+    function renderSeries(values, polyline, group, pointClass) {
+        const points = values.map(toPoint);
+        polyline.setAttribute("points", points.map(([x, y]) => `${x},${y}`).join(" "));
+        group.innerHTML = points.map(([x, y]) => `<circle class="${pointClass}" cx="${x}" cy="${y}" r="5"></circle>`).join("");
+        return points;
+    }
+
+    renderSeries(seriesA, polylineA, pointsA, "point-a");
+    renderSeries(seriesB, polylineB, pointsB, "point-b");
+    labelGroup.innerHTML = labels.map((label, index) => {
+        const x = startX + stepX * index;
+        return `<text x="${x}" y="256" text-anchor="middle">${label}</text>`;
+    }).join("");
+})();
+</script>
+{% endblock %}

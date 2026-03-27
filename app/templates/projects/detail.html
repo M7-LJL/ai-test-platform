@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block title %}项目详情{% endblock %}
+{% block page_title %}项目详情{% endblock %}
+{% block page_subtitle %}查看项目下的需求、工作流和用例，作为项目维度的总览页面。{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -16,31 +18,57 @@
     </div>
 </div>
 
+<div class="metric-grid">
+    <div class="metric-card">
+        <div>
+            <span class="metric-label">需求数</span>
+            <strong class="metric-value">{{ requirements | length }}</strong>
+            <span class="metric-note">当前项目需求总量</span>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div>
+            <span class="metric-label">工作流数</span>
+            <strong class="metric-value">{{ workflows | length }}</strong>
+            <span class="metric-note">已进入测试流程的条目</span>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div>
+            <span class="metric-label">用例数</span>
+            <strong class="metric-value">{{ test_cases | length }}</strong>
+            <span class="metric-note">当前沉淀的测试用例</span>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <h2>需求列表</h2>
     {% if requirements %}
-    <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">创建时间</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for requirement in requirements %}
-            <tr>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.title }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.analysis_status }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ requirement.created_at }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}">查看需求</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>标题</th>
+                    <th>状态</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for requirement in requirements %}
+                <tr>
+                    <td>{{ requirement.title }}</td>
+                    <td><span class="tag">{{ requirement.analysis_status }}</span></td>
+                    <td>{{ requirement.created_at.strftime('%Y-%m-%d %H:%M') if requirement.created_at else "-" }}</td>
+                    <td>
+                        <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}">查看需求</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <p class="muted">当前项目还没有需求。</p>
     {% endif %}
@@ -49,43 +77,45 @@
 <div class="card">
     <h2>测试工作流</h2>
     {% if workflows %}
-    <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">工作流名称</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">关联需求</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">当前阶段</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">状态</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">创建时间</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for wf in workflows %}
-            <tr>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ wf.name }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    {% if wf.requirement_id %}
-                    <a href="/requirements/{{ wf.requirement_id }}">{{ wf.requirement.title if wf.requirement else wf.requirement_id }}</a>
-                    {% else %}-{% endif %}
-                </td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    {% set stage_map = {'outline': '测试大纲', 'analysis': '需求分析', 'cases': '用例编写', 'defects': '缺陷报告', 'report': '测试报告'} %}
-                    {{ stage_map.get(wf.current_stage, wf.current_stage) }}
-                </td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    {% if wf.status == 'completed' %}<span style="color: #065f46;">已完成</span>
-                    {% elif wf.status == 'in_progress' %}<span style="color: #b45309;">进行中</span>
-                    {% else %}<span style="color: #6b7280;">草稿</span>{% endif %}
-                </td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ wf.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    <a class="btn btn-secondary" href="/workflow/{{ wf.id }}">进入工作流</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>工作流名称</th>
+                    <th>关联需求</th>
+                    <th>当前阶段</th>
+                    <th>状态</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for wf in workflows %}
+                <tr>
+                    <td>{{ wf.name }}</td>
+                    <td>
+                        {% if wf.requirement_id %}
+                        <a href="/requirements/{{ wf.requirement_id }}">{{ wf.requirement.title if wf.requirement else wf.requirement_id }}</a>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% set stage_map = {'outline': '测试大纲', 'analysis': '需求分析', 'cases': '用例编写', 'defects': '缺陷报告', 'report': '测试报告'} %}
+                        {{ stage_map.get(wf.current_stage, wf.current_stage) }}
+                    </td>
+                    <td>
+                        {% if wf.status == 'completed' %}<span class="tag tag-accent">已完成</span>
+                        {% elif wf.status == 'in_progress' %}<span class="tag">进行中</span>
+                        {% else %}<span class="muted">草稿</span>{% endif %}
+                    </td>
+                    <td>{{ wf.created_at.strftime('%Y-%m-%d %H:%M') if wf.created_at else "-" }}</td>
+                    <td>
+                        <a class="btn btn-secondary" href="/workflow/{{ wf.id }}">进入工作流</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <p class="muted">当前项目还没有测试工作流。新建需求后会自动创建。</p>
     {% endif %}
@@ -94,34 +124,36 @@
 <div class="card">
     <h2>用例列表</h2>
     {% if test_cases %}
-    <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">用例ID</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">标题</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">来源需求</th>
-                <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for testcase in test_cases %}
-            <tr>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.case_id }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">{{ testcase.title }}</td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    {% if testcase.requirement_id %}
-                    <a href="/requirements/{{ testcase.requirement_id }}">{{ testcase.requirement.title if testcase.requirement else testcase.requirement_id }}</a>
-                    {% else %}
-                    -
-                    {% endif %}
-                </td>
-                <td style="border: 1px solid #d1d5db; padding: 10px;">
-                    <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑用例</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>用例ID</th>
+                    <th>标题</th>
+                    <th>来源需求</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for testcase in test_cases %}
+                <tr>
+                    <td>{{ testcase.case_id }}</td>
+                    <td>{{ testcase.title }}</td>
+                    <td>
+                        {% if testcase.requirement_id %}
+                        <a href="/requirements/{{ testcase.requirement_id }}">{{ testcase.requirement.title if testcase.requirement else testcase.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑用例</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <p class="muted">当前项目还没有测试用例。</p>
     {% endif %}
