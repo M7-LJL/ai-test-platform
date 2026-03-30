@@ -110,6 +110,72 @@ def _clean_text(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+IDENTIFIER_PATTERNS: tuple[str, ...] = (
+    r"/[A-Za-z0-9/_\-.?=&%:{}]+",
+    r"\b[a-z]+(?:_[a-z0-9]+){1,}\b",
+    r"\b[A-Za-z][A-Za-z0-9_-]*\.[A-Za-z0-9._/-]+\b",
+)
+
+
+def _extract_identifier_candidates(text: str) -> list[str]:
+    normalized = text or ""
+    identifiers: list[str] = []
+    for pattern in IDENTIFIER_PATTERNS:
+        for match in re.findall(pattern, normalized):
+            candidate = _clean_text(match)
+            if not candidate or len(candidate) < 4:
+                continue
+            if candidate not in identifiers:
+                identifiers.append(candidate)
+    return identifiers
+
+
+def _identifier_evidence_text(workflow: TestWorkflow, stages: dict[str, WorkflowStage]) -> str:
+    parts: list[str] = []
+    requirement = workflow.requirement
+    if requirement is not None:
+        if requirement.content:
+            parts.append(requirement.content)
+        if requirement.review_notes:
+            parts.append(requirement.review_notes)
+    outline_stage = stages.get("outline")
+    if outline_stage and outline_stage.input_content:
+        parts.append(outline_stage.input_content)
+    return "\n".join(parts)
+
+
+def _sanitize_generated_output_identifiers(output: str, evidence_text: str) -> str:
+    if not output.strip():
+        return output
+    source = _clean_text(evidence_text).lower()
+    if not source:
+        return output
+    sanitized = output
+    for fragment in re.findall(r"`[^`\n]+`", output):
+        inner = fragment.strip("`")
+        inner_candidates = _extract_identifier_candidates(inner)
+        if not inner_candidates:
+            continue
+        if any(candidate.lower() not in source for candidate in inner_candidates):
+            sanitized = sanitized.replace(fragment, "`待确认`")
+    for assignment in re.findall(r"\b([a-z]+(?:_[a-z0-9]+){1,})\s*=\s*([^\s，,；;）)\]]+)", output):
+        key, value = assignment
+        if key.lower() in source:
+            continue
+        sanitized = re.sub(
+            rf"\b{re.escape(key)}\s*=\s*{re.escape(value)}",
+            "待确认",
+            sanitized,
+            flags=re.IGNORECASE,
+        )
+    for candidate in _extract_identifier_candidates(output):
+        if candidate.lower() in source:
+            continue
+        sanitized = re.sub(re.escape(candidate), "待确认", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"(待确认[\s/、，,;；]*){2,}", "待确认 ", sanitized)
+    return sanitized
+
+
 def _normalized_string_list(values: object) -> list[str]:
     if not isinstance(values, list):
         return []
@@ -332,7 +398,7 @@ def _build_stage_generation_context(
                     [
                         "- 输出完整测试需求分析，不是轻量摘要。",
                         "- 必须包含：术语与缩写、测试范围、按维度穷尽的测试点、真实用户场景补充、需求疑义与遗漏、需求追溯、自检。",
-                        "- 测试关注点和需求来源尽量引用原型、批注、字段名、按钮名、接口、状态、规则、配置项等真实锚点。",
+                        "- 测试关注点和需求来源优先引用页面、入口、按钮、状态、规则、配置项和业务场景等真实业务锚点。",
                     ]
                 ),
                 "## 结构化分析参考",
@@ -365,6 +431,36 @@ def _build_stage_generation_context(
         )
 
     return "\n\n".join(section for section in sections if section).strip()
+
+
+def _build_analysis_source_content(
+    workflow: TestWorkflow,
+    stages: dict[str, WorkflowStage],
+    input_content: str,
+) -> str:
+    requirement = workflow.requirement
+    if requirement is None:
+        return input_content.strip()
+
+    outline_output = (stages.get("outline").output_content if stages.get("outline") else "") or ""
+    analysis_sources = [requirement.content]
+    if outline_output.strip():
+        analysis_sources.extend(
+            [
+                "## 测试大纲",
+                outline_output.strip(),
+            ]
+        )
+    requirement_content = requirement.content.strip()
+    current_input = input_content.strip()
+    if current_input and current_input != requirement_content and current_input != outline_output.strip():
+        analysis_sources.extend(
+            [
+                "## 当前阶段补充输入",
+                current_input,
+            ]
+        )
+    return "\n\n".join(part for part in analysis_sources if part)
 
 
 def _sync_requirement_analysis_payload(
@@ -547,28 +643,28 @@ def generate_stage(
                     status_code=400,
                     detail="已选择使用大模型，但未配置 LLM_API_KEY，请在 .env 中配置或取消勾选「工作流使用大模型」。",
                 )
-            stage_context = _build_stage_generation_context(wf, stages, stage_type, input_content)
-            result = generate_stage_content(stage_type, stage_context)
+            if stage_type == "analysis" and wf.requirement is not None:
+                analysis_input = _build_analysis_source_content(wf, stages, input_content)
+                analysis_payload = build_requirement_analysis(
+                    analysis_input,
+                    title=wf.requirement.title,
+                    use_llm=True,
+                )
+                result = {
+                    "output": render_requirement_analysis_markdown(
+                        analysis_payload,
+                        title=wf.requirement.title,
+                    ),
+                    "prompt_used": "llm_structured_analysis_from_requirement",
+                    "analysis_payload": analysis_payload,
+                }
+            else:
+                stage_context = _build_stage_generation_context(wf, stages, stage_type, input_content)
+                result = generate_stage_content(stage_type, stage_context)
         else:
             if stage_type == "analysis" and wf.requirement is not None:
-                outline_output = (stages.get("outline").output_content if stages.get("outline") else "") or ""
-                analysis_sources = [wf.requirement.content]
-                if outline_output.strip():
-                    analysis_sources.extend(
-                        [
-                            "## 测试大纲",
-                            outline_output.strip(),
-                        ]
-                    )
-                if input_content.strip() and input_content.strip() != outline_output.strip():
-                    analysis_sources.extend(
-                        [
-                            "## 当前阶段补充输入",
-                            input_content.strip(),
-                        ]
-                    )
                 analysis_payload = build_requirement_analysis(
-                    "\n\n".join(part for part in analysis_sources if part),
+                    _build_analysis_source_content(wf, stages, input_content),
                     title=wf.requirement.title,
                     use_llm=False,
                 )
@@ -591,6 +687,11 @@ def generate_stage(
                 }
             else:
                 result = generate_placeholder_content(stage_type, input_content)
+        evidence_text = _identifier_evidence_text(wf, stages)
+        original_output = result["output"]
+        result["output"] = _sanitize_generated_output_identifiers(result["output"], evidence_text)
+        if stage_type == "analysis" and original_output != result["output"]:
+            result.pop("analysis_payload", None)
         if stage_type == "analysis":
             result["output"] = _normalize_analysis_output_markdown(result["output"])
         current.output_content = result["output"]

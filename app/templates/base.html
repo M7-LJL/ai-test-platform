@@ -1124,6 +1124,16 @@
         .wf-md-output li {
             margin-bottom: 4px;
         }
+        .wf-md-output input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            margin: 0 8px 0 0;
+            padding: 0;
+            vertical-align: text-top;
+            accent-color: #2563eb;
+            pointer-events: none;
+            box-shadow: none;
+        }
         .wf-md-output table {
             border-collapse: collapse;
             width: 100%;
@@ -1374,9 +1384,20 @@
 </head>
 <body>
     {% set current_path = request.url.path if request else "" %}
+    {% set testcase_status_labels = {"draft": "草稿", "ready": "已就绪", "blocked": "阻塞", "in_progress": "编写中", "completed": "已完成"} %}
+    {% set testcase_review_status_labels = {"draft": "未提交评审", "pending_review": "待评审", "in_review": "评审中", "approved": "评审通过", "reviewed": "已评审", "needs_update": "待修改", "rejected": "已驳回"} %}
+    {% set plan_status_labels = {"draft": "计划草稿", "in_progress": "执行中", "completed": "已完成"} %}
+    {% set review_status_labels = {"draft": "评审草稿", "pending": "待开始", "in_review": "评审中", "completed": "评审完成", "cancelled": "已取消"} %}
+    {% set requirement_status_labels = {"draft": "待分析", "reviewed": "已确认", "ready_for_execution": "可执行"} %}
+    {% set workflow_status_labels = {"draft": "草稿", "in_progress": "进行中", "completed": "已完成", "failed": "失败"} %}
+    {% set workflow_stage_status_labels = {"pending": "待处理", "running": "生成中", "completed": "已完成", "failed": "失败"} %}
+    {% set defect_status_labels = {"open": "待处理", "processing": "处理中", "resolved": "已解决", "closed": "已关闭"} %}
+    {% set defect_severity_labels = {"critical": "致命", "major": "严重", "minor": "一般"} %}
+    {% set review_log_action_labels = {"created": "创建评审单", "submitted": "提交评审", "started": "开始评审", "item_decided": "记录评审结论", "completed": "完成评审"} %}
     {% set projects_open = current_path.startswith('/projects') %}
     {% set requirements_open = current_path.startswith('/requirements') or current_path.startswith('/workflow') %}
     {% set testcases_open = current_path.startswith('/testcases') %}
+    {% set case_reviews_open = current_path.startswith('/case-reviews') %}
     {% set plans_open = current_path.startswith('/plans') %}
     {% set defects_open = current_path.startswith('/defects') %}
     <div class="app-shell">
@@ -1386,7 +1407,7 @@
                     <div class="sidebar-logo">T</div>
                     <div class="sidebar-brand-text">
                         <strong>测试平台</strong>
-                        <span>测试工作台</span>
+                        <span>测试管理工作台</span>
                     </div>
                 </a>
 
@@ -1418,12 +1439,12 @@
                                 </span>
                                 <span class="sidebar-link-body">
                                     <span class="sidebar-link-label">
-                                        <strong>项目管理</strong>
-                                        <span>项目与范围</span>
+                                        <strong>项目工作台</strong>
+                                        <span>项目范围与测试活动</span>
                                     </span>
                                     <span class="sidebar-link-actions">
                                         <span class="sidebar-link-meta">02</span>
-                                        <button class="sidebar-expand-btn" type="button" data-toggle-group="projects" aria-label="展开项目管理子菜单">
+                                        <button class="sidebar-expand-btn" type="button" data-toggle-group="projects" aria-label="展开项目工作台子菜单">
                                             <span class="sidebar-link-caret">
                                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
                                             </span>
@@ -1433,10 +1454,10 @@
                             </a>
                             <div class="sidebar-subnav">
                                 <a class="sidebar-link-secondary {% if current_path == '/projects' %}is-active{% endif %}" href="/projects">
-                                    <span>项目列表</span>
+                                    <span>项目总览</span>
                                 </a>
                                 <a class="sidebar-link-secondary {% if current_path == '/projects/new' %}is-active{% endif %}" href="/projects/new">
-                                    <span>创建项目</span>
+                                    <span>新建项目</span>
                                 </a>
                             </div>
                         </div>
@@ -1448,12 +1469,12 @@
                                 </span>
                                 <span class="sidebar-link-body">
                                     <span class="sidebar-link-label">
-                                        <strong>需求工作流</strong>
-                                        <span>分析与拆解</span>
+                                        <strong>需求工作台</strong>
+                                        <span>需求分析与测试设计</span>
                                     </span>
                                     <span class="sidebar-link-actions">
                                         <span class="sidebar-link-meta">03</span>
-                                        <button class="sidebar-expand-btn" type="button" data-toggle-group="requirements" aria-label="展开需求工作流子菜单">
+                                        <button class="sidebar-expand-btn" type="button" data-toggle-group="requirements" aria-label="展开需求工作台子菜单">
                                             <span class="sidebar-link-caret">
                                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
                                             </span>
@@ -1471,6 +1492,39 @@
                             </div>
                         </div>
 
+                        <div class="sidebar-menu-group {% if case_reviews_open %}is-open{% endif %}" data-sidebar-group="case-reviews">
+                            <a class="sidebar-link {% if case_reviews_open %}is-active{% endif %}" href="/case-reviews">
+                                <span class="sidebar-icon">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h11"></path><path d="M9 7h11"></path><path d="M9 17h11"></path><circle cx="5" cy="7" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="5" cy="17" r="1"></circle></svg>
+                                </span>
+                                <span class="sidebar-link-body">
+                                    <span class="sidebar-link-label">
+                                        <strong>用例评审台</strong>
+                                        <span>评审执行与结论</span>
+                                    </span>
+                                    <span class="sidebar-link-actions">
+                                        <span class="sidebar-link-meta">04</span>
+                                        <button class="sidebar-expand-btn" type="button" data-toggle-group="case-reviews" aria-label="展开用例评审子菜单">
+                                            <span class="sidebar-link-caret">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+                                            </span>
+                                        </button>
+                                    </span>
+                                </span>
+                            </a>
+                            <div class="sidebar-subnav">
+                                <a class="sidebar-link-secondary {% if current_path == '/case-reviews' %}is-active{% endif %}" href="/case-reviews">
+                                    <span>评审工作台</span>
+                                </a>
+                                <a class="sidebar-link-secondary {% if current_path == '/case-reviews/my-tasks' %}is-active{% endif %}" href="/case-reviews/my-tasks">
+                                    <span>我的任务</span>
+                                </a>
+                                <a class="sidebar-link-secondary {% if current_path == '/case-reviews/results' %}is-active{% endif %}" href="/case-reviews/results">
+                                    <span>评审结果</span>
+                                </a>
+                            </div>
+                        </div>
+
                         <div class="sidebar-menu-group {% if testcases_open %}is-open{% endif %}">
                             <a class="sidebar-link {% if testcases_open %}is-active{% endif %}" href="/testcases">
                                 <span class="sidebar-icon">
@@ -1478,10 +1532,10 @@
                                 </span>
                                 <span class="sidebar-link-body">
                                     <span class="sidebar-link-label">
-                                        <strong>用例中心</strong>
-                                        <span>沉淀正式用例</span>
+                                        <strong>用例库</strong>
+                                        <span>正式用例维护</span>
                                     </span>
-                                    <span class="sidebar-link-meta">04</span>
+                                    <span class="sidebar-link-meta">05</span>
                                 </span>
                             </a>
                         </div>
@@ -1498,10 +1552,10 @@
                                 </span>
                                 <span class="sidebar-link-body">
                                     <span class="sidebar-link-label">
-                                        <strong>执行中心</strong>
-                                        <span>计划与结果</span>
+                                        <strong>执行工作台</strong>
+                                        <span>计划执行与结果</span>
                                     </span>
-                                    <span class="sidebar-link-meta">05</span>
+                                    <span class="sidebar-link-meta">06</span>
                                 </span>
                             </a>
                         </div>
@@ -1512,10 +1566,10 @@
                                 </span>
                                 <span class="sidebar-link-body">
                                     <span class="sidebar-link-label">
-                                        <strong>缺陷中心</strong>
-                                        <span>问题沉淀与追踪</span>
+                                        <strong>缺陷工作台</strong>
+                                        <span>缺陷跟踪与闭环</span>
                                     </span>
-                                    <span class="sidebar-link-meta">06</span>
+                                    <span class="sidebar-link-meta">07</span>
                                 </span>
                             </a>
                         </div>

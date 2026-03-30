@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}评审执行{% endblock %}
+{% block page_title %}评审执行{% endblock %}
+{% block page_subtitle %}逐条查看用例并给出通过、需修改或拒绝结论。{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ review.title }}</h2>
+    <div class="panel-grid">
+        <div class="info-panel">
+            <h3>基本信息</h3>
+            <ul class="dense-list">
+                <li>所属项目：{{ review.project.name if review.project else "-" }}</li>
+                <li>关联需求：{% if review.requirement %}{{ review.requirement.title }}{% else %}未关联{% endif %}</li>
+                <li>当前状态：<span id="review-current-status">{{ review_status_labels.get(review.status, review.status) }}</span></li>
+                <li>发起人：{{ review.initiator_name or "-" }}</li>
+                <li>评审人：{{ review.reviewer_name or "-" }}</li>
+                <li>截止时间：{{ review.deadline_at.strftime('%Y-%m-%d %H:%M') if review.deadline_at else "-" }}</li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>结果概览</h3>
+            <ul class="dense-list">
+                <li>总数：<span id="review-stat-total">{{ stats.total }}</span></li>
+                <li>待处理：<span id="review-stat-pending">{{ stats.pending }}</span></li>
+                <li>通过：<span id="review-stat-approved">{{ stats.approved }}</span></li>
+                <li>需修改：<span id="review-stat-needs-update">{{ stats.needs_update }}</span></li>
+                <li>拒绝：<span id="review-stat-rejected">{{ stats.rejected }}</span></li>
+            </ul>
+        </div>
+        <div class="info-panel">
+            <h3>说明</h3>
+            <p class="muted" style="margin-bottom: 0;">{{ review.summary or "当前没有补充说明。" }}</p>
+        </div>
+    </div>
+    <div class="page-actions" id="review-top-actions">
+        {% if review.status == "draft" %}
+        <form method="post" action="/case-reviews/{{ review.id }}/submit" data-review-action-form data-visible-statuses="draft">
+            <button class="btn" type="submit">提交评审单</button>
+        </form>
+        {% endif %}
+        {% if review.status in ["draft", "pending"] %}
+        <form method="post" action="/case-reviews/{{ review.id }}/start" data-review-action-form data-visible-statuses="draft,pending">
+            <button class="btn btn-secondary" type="submit">进入评审执行</button>
+        </form>
+        {% endif %}
+        {% if review.status != "completed" %}
+        <form method="post" action="/case-reviews/{{ review.id }}/complete" data-review-action-form data-visible-statuses="draft,pending,in_review">
+            <button class="btn btn-secondary" type="submit">提交最终评审结论</button>
+        </form>
+        {% endif %}
+        <a class="btn btn-secondary" href="/case-reviews">返回用例评审台</a>
+        <a class="btn btn-secondary" href="/case-reviews/results">查看评审结论汇总</a>
+        <span class="muted" id="review-action-feedback" aria-live="polite"></span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>评审项</h2>
+    {% if review.items %}
+    <div class="stack-section">
+        {% for item in review.items %}
+        <div class="scenario-block" open data-review-item-id="{{ item.id }}">
+            <summary>
+                <div class="scenario-heading">
+                    <span>{{ loop.index }}. {{ item.case_title_snapshot }}</span>
+                    <span class="tag review-item-decision-tag{% if item.decision == 'approved' %} tag-accent{% endif %}"{% if item.decision == "needs_update" %} style="background: #fff7ed; color: #c2410c;"{% elif item.decision == "rejected" %} style="background: #fef2f2; color: #991b1b;"{% endif %}>
+                        {% if item.decision == "approved" %}已通过{% elif item.decision == "needs_update" %}需修改{% elif item.decision == "rejected" %}已拒绝{% else %}待评审{% endif %}
+                    </span>
+                </div>
+                <span class="scenario-toggle">{{ item.priority_snapshot or "未设置优先级" }}</span>
+            </summary>
+
+            <div style="margin-top: 16px;" class="panel-grid">
+                <div class="info-panel">
+                    <h3>用例信息</h3>
+                    <ul class="dense-list">
+                        <li>用例ID：{{ item.test_case.case_id if item.test_case else "-" }}</li>
+                        <li>模块：{{ item.test_case.module if item.test_case else "-" }}</li>
+                        <li>需求：{% if item.test_case and item.test_case.requirement %}{{ item.test_case.requirement.title }}{% else %}未关联{% endif %}</li>
+                        <li>当前评审状态：<span class="review-item-case-status">{{ testcase_review_status_labels.get(item.test_case.review_status, item.test_case.review_status) if item.test_case else "-" }}</span></li>
+                    </ul>
+                    {% if item.test_case %}
+                    <div class="page-actions">
+                        <a class="btn btn-secondary" href="/testcases/{{ item.test_case.id }}/edit">编辑原始用例</a>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="info-panel">
+                    <h3>前置条件</h3>
+                    <p style="white-space: pre-wrap;">{{ item.test_case.preconditions if item.test_case and item.test_case.preconditions else "未填写" }}</p>
+                </div>
+
+                <div class="info-panel">
+                    <h3>步骤与预期</h3>
+                    <p><strong>步骤</strong></p>
+                    <p style="white-space: pre-wrap;">{{ item.test_case.steps if item.test_case else "-" }}</p>
+                    <p><strong>预期结果</strong></p>
+                    <p style="white-space: pre-wrap;">{{ item.test_case.expected if item.test_case else "-" }}</p>
+                </div>
+            </div>
+
+            {% if review.status != "completed" %}
+            <form method="post" action="/case-reviews/{{ review.id }}/items/{{ item.id }}/decision" class="review-item-decision-form" data-review-item-form>
+                <div class="panel-grid" style="margin-top: 16px;">
+                    <div>
+                        <label>评审结论</label>
+                        <select name="decision" required>
+                            <option value="">请选择结论</option>
+                            <option value="approved" {% if item.decision == "approved" %}selected{% endif %}>通过</option>
+                            <option value="needs_update" {% if item.decision == "needs_update" %}selected{% endif %}>需修改</option>
+                            <option value="rejected" {% if item.decision == "rejected" %}selected{% endif %}>拒绝</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>评审人</label>
+                        <input type="text" name="reviewed_by" value="{{ item.reviewed_by or review.reviewer_name or '' }}" placeholder="例如：QA-李四">
+                    </div>
+                    <div class="editor-field-wide">
+                        <label>评审意见</label>
+                        <textarea name="comment" rows="3" placeholder="说明通过依据，或者写清楚需修改点">{{ item.comment or "" }}</textarea>
+                    </div>
+                </div>
+                <div class="page-actions">
+                    <button class="btn" type="submit">保存该用例评审结论</button>
+                    <span class="muted review-item-feedback" aria-live="polite"></span>
+                </div>
+            </form>
+            {% else %}
+            <div class="info-panel" style="margin-top: 16px;">
+                <h3>已记录结论</h3>
+                <p><strong>结论：</strong>{{ {"approved": "通过", "needs_update": "需修改", "rejected": "拒绝"}.get(item.decision, "未处理") }}</p>
+                <p><strong>评审人：</strong>{{ item.reviewed_by or "-" }}</p>
+                <p style="white-space: pre-wrap;"><strong>意见：</strong>{{ item.comment or "无" }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">当前评审单还没有评审项。</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>评审日志</h2>
+    {% if review.logs %}
+    <div class="dashboard-list">
+        {% for log in review.logs %}
+        <div class="dashboard-list-item">
+            <div>
+                <strong>{{ review_log_action_labels.get(log.action, log.action) }}</strong>
+                <p class="cell-subtext">{{ log.content or "无说明" }}</p>
+            </div>
+            <div class="list-meta">
+                {{ log.operator_name or "-" }}<br>
+                {{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else "-" }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">当前还没有评审日志。</p>
+    {% endif %}
+</div>
+<script>
+(function () {
+    const decisionLabels = {
+        approved: "已通过",
+        needs_update: "需修改",
+        rejected: "已拒绝",
+    };
+    const testcaseStatusLabels = {
+        draft: "未提交评审",
+        pending_review: "待评审",
+        in_review: "评审中",
+        approved: "评审通过",
+        reviewed: "已评审",
+        needs_update: "待修改",
+        rejected: "已驳回",
+    };
+    const reviewStatusLabels = {
+        draft: "评审草稿",
+        pending: "待开始",
+        in_review: "评审中",
+        completed: "评审完成",
+        cancelled: "已取消",
+    };
+
+    function setButtonLoading(button, loading, loadingText, fallbackText) {
+        if (!button) {
+            return;
+        }
+        if (loading) {
+            button.dataset.originalText = button.textContent;
+            button.textContent = loadingText || "处理中...";
+            button.disabled = true;
+            return;
+        }
+        button.textContent = button.dataset.originalText || fallbackText || "提交";
+        button.disabled = false;
+    }
+
+    function setFormControlsDisabled(form, disabled) {
+        form.querySelectorAll("input, select, textarea, button").forEach(element => {
+            element.disabled = disabled;
+        });
+    }
+
+    function syncTopActionVisibility(reviewStatus) {
+        document.querySelectorAll("[data-review-action-form]").forEach(form => {
+            const allowedStatuses = (form.dataset.visibleStatuses || "")
+                .split(",")
+                .map(item => item.trim())
+                .filter(Boolean);
+            form.style.display = allowedStatuses.includes(reviewStatus) ? "" : "none";
+        });
+    }
+
+    function syncDecisionFormsForReviewStatus(reviewStatus) {
+        const disabled = reviewStatus === "completed";
+        document.querySelectorAll("[data-review-item-form]").forEach(form => {
+            setFormControlsDisabled(form, disabled);
+            if (disabled) {
+                const feedback = form.querySelector(".review-item-feedback");
+                if (feedback && !feedback.textContent) {
+                    feedback.textContent = "评审已完成，当前用例已锁定。";
+                    feedback.style.color = "#64748b";
+                }
+            }
+        });
+    }
+
+    function updateDecisionTag(card, decision) {
+        const tag = card.querySelector(".review-item-decision-tag");
+        if (!tag) {
+            return;
+        }
+        tag.textContent = decisionLabels[decision] || "待评审";
+        tag.className = "tag review-item-decision-tag";
+        tag.removeAttribute("style");
+        if (decision === "approved") {
+            tag.classList.add("tag-accent");
+        } else if (decision === "needs_update") {
+            tag.style.background = "#fff7ed";
+            tag.style.color = "#c2410c";
+        } else if (decision === "rejected") {
+            tag.style.background = "#fef2f2";
+            tag.style.color = "#991b1b";
+        }
+    }
+
+    function updateSummary(stats, reviewStatus) {
+        const mappings = {
+            total: "review-stat-total",
+            pending: "review-stat-pending",
+            approved: "review-stat-approved",
+            needs_update: "review-stat-needs-update",
+            rejected: "review-stat-rejected",
+        };
+        Object.entries(mappings).forEach(([key, id]) => {
+            const element = document.getElementById(id);
+            if (element && typeof stats[key] !== "undefined") {
+                element.textContent = String(stats[key]);
+            }
+        });
+        const currentStatus = document.getElementById("review-current-status");
+        if (currentStatus && reviewStatus) {
+            currentStatus.textContent = reviewStatusLabels[reviewStatus] || reviewStatus;
+        }
+        syncTopActionVisibility(reviewStatus);
+        syncDecisionFormsForReviewStatus(reviewStatus);
+    }
+
+    async function submitActionForm(form, options) {
+        const submitButton = form.querySelector("button[type='submit']");
+        const feedback = document.getElementById("review-action-feedback");
+        setButtonLoading(submitButton, true, options.loadingText, options.fallbackText);
+        if (feedback) {
+            feedback.textContent = "";
+            feedback.style.color = "";
+        }
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                },
+                body: new FormData(form),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || options.errorText || "提交失败，请稍后重试。");
+            }
+            updateSummary(payload.stats || {}, payload.review_status || "");
+            if (feedback) {
+                feedback.textContent = payload.message || options.successText || "操作成功。";
+                feedback.style.color = "#166534";
+            }
+        } catch (error) {
+            if (feedback) {
+                feedback.textContent = error instanceof Error ? error.message : (options.errorText || "提交失败，请稍后重试。");
+                feedback.style.color = "#b91c1c";
+            }
+        } finally {
+            setButtonLoading(submitButton, false, options.loadingText, options.fallbackText);
+        }
+    }
+
+    document.querySelectorAll("[data-review-item-form]").forEach(form => {
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const submitButton = form.querySelector("button[type='submit']");
+            const feedback = form.querySelector(".review-item-feedback");
+            const card = form.closest("[data-review-item-id]");
+            if (!card) {
+                form.submit();
+                return;
+            }
+
+            setButtonLoading(submitButton, true, "保存中...", "保存该用例评审结论");
+            if (feedback) {
+                feedback.textContent = "";
+                feedback.style.color = "";
+            }
+
+            try {
+                const response = await fetch(form.action, {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                    },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || "保存失败，请稍后重试。");
+                }
+
+                updateDecisionTag(card, payload.item.decision);
+                const statusElement = card.querySelector(".review-item-case-status");
+                if (statusElement) {
+                    statusElement.textContent = testcaseStatusLabels[payload.item.testcase_review_status] || payload.item.testcase_review_status || "-";
+                }
+                updateSummary(payload.stats || {}, payload.review_status || "");
+                if (feedback) {
+                    feedback.textContent = payload.message || "已保存";
+                    feedback.style.color = "#166534";
+                }
+            } catch (error) {
+                if (feedback) {
+                    feedback.textContent = error instanceof Error ? error.message : "保存失败，请稍后重试。";
+                    feedback.style.color = "#b91c1c";
+                }
+            } finally {
+                setButtonLoading(submitButton, false, "保存中...", "保存该用例评审结论");
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-review-action-form]").forEach(form => {
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const action = form.action;
+            if (action.endsWith("/submit")) {
+                await submitActionForm(form, {
+                    loadingText: "提交中...",
+                    fallbackText: "提交评审单",
+                    successText: "评审单已提交。",
+                    errorText: "提交评审单失败，请稍后重试。",
+                });
+                return;
+            }
+            if (action.endsWith("/start")) {
+                await submitActionForm(form, {
+                    loadingText: "进入中...",
+                    fallbackText: "进入评审执行",
+                    successText: "已进入评审执行。",
+                    errorText: "进入评审执行失败，请稍后重试。",
+                });
+                return;
+            }
+            if (action.endsWith("/complete")) {
+                await submitActionForm(form, {
+                    loadingText: "提交中...",
+                    fallbackText: "提交最终评审结论",
+                    successText: "最终评审结论已提交。",
+                    errorText: "提交最终评审结论失败，请稍后重试。",
+                });
+            }
+        });
+    });
+
+    syncTopActionVisibility("{{ review.status }}");
+    syncDecisionFormsForReviewStatus("{{ review.status }}");
+})();
+</script>
+{% endblock %}

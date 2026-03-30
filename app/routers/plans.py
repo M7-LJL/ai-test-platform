@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Project, Requirement, TestCase, TestPlan, TestPlanCase
 
+APPROVED_CASE_STATUSES = {"approved", "reviewed"}
+
 router = APIRouter(prefix="/plans", tags=["plans-html"])
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -137,6 +139,10 @@ def create_plan(
         if requirement is None:
             raise HTTPException(status_code=400, detail="Requirement does not belong to the project.")
 
+    case_ids = _parse_int_list(selected_case_ids)
+    if not case_ids:
+        raise HTTPException(status_code=400, detail="请先在用例列表中勾选至少一条用例，再创建测试计划。")
+
     plan = TestPlan(
         project_id=project_id,
         requirement_id=normalized_requirement_id,
@@ -150,23 +156,31 @@ def create_plan(
     db.add(plan)
     db.flush()
 
-    case_ids = _parse_int_list(selected_case_ids)
-    if case_ids:
-        cases = (
-            db.query(TestCase)
-            .filter(TestCase.id.in_(case_ids), TestCase.project_id == project_id)
-            .order_by(TestCase.created_at.asc())
-            .all()
+    cases = (
+        db.query(TestCase)
+        .filter(TestCase.id.in_(case_ids), TestCase.project_id == project_id)
+        .order_by(TestCase.created_at.asc())
+        .all()
+    )
+    if len(cases) != len(case_ids):
+        raise HTTPException(status_code=400, detail="所选用例与当前项目不匹配，请重新勾选。")
+
+    unapproved_cases = [case.case_id for case in cases if case.review_status not in APPROVED_CASE_STATUSES]
+    if unapproved_cases:
+        raise HTTPException(
+            status_code=400,
+            detail=f"只有“评审通过 / 已评审”的用例才能加入测试计划，请先处理这些用例：{', '.join(unapproved_cases[:5])}",
         )
-        for index, case in enumerate(cases):
-            db.add(
-                TestPlanCase(
-                    plan_id=plan.id,
-                    test_case_id=case.id,
-                    sort_order=index,
-                    run_status="untested",
-                )
+
+    for index, case in enumerate(cases):
+        db.add(
+            TestPlanCase(
+                plan_id=plan.id,
+                test_case_id=case.id,
+                sort_order=index,
+                run_status="untested",
             )
+        )
 
     db.commit()
     return RedirectResponse(url=f"/plans/{plan.id}", status_code=303)

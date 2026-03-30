@@ -72,6 +72,13 @@ def _clean_text(value: str) -> str:
     return " ".join((value or "").replace("\u3000", " ").split()).strip()
 
 
+def _safe_redirect_target(target: str, fallback: str = "/testcases") -> str:
+    candidate = (target or "").strip()
+    if candidate.startswith("/") and not candidate.startswith("//") and "://" not in candidate:
+        return candidate
+    return fallback
+
+
 def _parse_int_list(raw_values: str) -> list[int]:
     values: list[int] = []
     for raw in (raw_values or "").split(","):
@@ -240,7 +247,7 @@ def _build_testcase_model(
         expected=case.get("expected") or "",
         status=case.get("status") or "draft",
         source=source,
-        review_status="reviewed",
+        review_status="pending_review",
         manually_edited=False,
         locked=False,
         source_version=source_version,
@@ -334,6 +341,7 @@ def list_testcases_page(
     project_id: str = Query(default=""),
     requirement_id: str = Query(default=""),
     status: str = Query(default=""),
+    review_status: str = Query(default=""),
     keyword: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
@@ -357,6 +365,8 @@ def list_testcases_page(
         query = query.filter(TestCase.requirement_id == selected_requirement_id)
     if status.strip():
         query = query.filter(TestCase.status == status.strip())
+    if review_status.strip():
+        query = query.filter(TestCase.review_status == review_status.strip())
     if keyword.strip():
         like_pattern = f"%{keyword.strip()}%"
         query = query.filter(
@@ -382,6 +392,7 @@ def list_testcases_page(
             "selected_project_id": selected_project_id,
             "selected_requirement_id": selected_requirement_id,
             "selected_status": status.strip(),
+            "selected_review_status": review_status.strip(),
             "keyword": keyword.strip(),
         },
     )
@@ -500,7 +511,12 @@ async def import_testcases_markdown_submit(
 
 
 @router.get("/testcases/{testcase_id}/edit", name="edit_testcase")
-def edit_testcase_page(testcase_id: int, request: Request, db: Session = Depends(get_db)):
+def edit_testcase_page(
+    testcase_id: int,
+    request: Request,
+    redirect_to: str = Query(default=""),
+    db: Session = Depends(get_db),
+):
     testcase = (
         db.query(TestCase)
         .options(joinedload(TestCase.requirement), joinedload(TestCase.project))
@@ -537,6 +553,10 @@ def edit_testcase_page(testcase_id: int, request: Request, db: Session = Depends
             "request": request,
             "testcase": testcase,
             "suites": suites,
+            "redirect_to": _safe_redirect_target(
+                redirect_to,
+                f"/requirements/{testcase.requirement_id}" if testcase.requirement_id else "/testcases",
+            ),
         },
     )
 
@@ -544,6 +564,7 @@ def edit_testcase_page(testcase_id: int, request: Request, db: Session = Depends
 @router.post("/testcases/{testcase_id}/edit", name="submit_edit_testcase")
 def submit_edit_testcase(
     testcase_id: int,
+    redirect_to: str = Form(default=""),
     title: str = Form(default=""),
     suite_id: str = Form(default=""),
     module: str = Form(default=""),
@@ -662,12 +683,16 @@ def submit_edit_testcase(
     testcase.locked = locked is not None
     testcase.manually_edited = True
     testcase.source = "manual_edit"
-    testcase.review_status = "reviewed"
+    testcase.review_status = "pending_review"
     testcase.last_editor = "手工编辑"
     testcase.updated_at = datetime.utcnow()
     db.commit()
 
-    redirect_requirement_id = testcase.requirement_id
-    if redirect_requirement_id is not None:
-        return RedirectResponse(url=f"/requirements/{redirect_requirement_id}?edited=1", status_code=303)
-    return RedirectResponse(url="/projects", status_code=303)
+    safe_redirect = _safe_redirect_target(
+        redirect_to,
+        f"/requirements/{testcase.requirement_id}" if testcase.requirement_id is not None else "/testcases",
+    )
+    separator = "&" if "?" in safe_redirect else "?"
+    if "edited=" not in safe_redirect:
+        safe_redirect = f"{safe_redirect}{separator}edited=1"
+    return RedirectResponse(url=safe_redirect, status_code=303)

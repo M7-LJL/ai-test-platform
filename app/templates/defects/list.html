@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}缺陷中心{% endblock %}
+{% block title %}缺陷工作台{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h1>缺陷中心</h1>
-    <p class="muted">查看和跟踪结构化缺陷记录。</p>
+    <h1>缺陷工作台</h1>
+    <p class="muted">集中跟踪缺陷生命周期，并查看关联需求、用例和执行上下文。</p>
 </div>
 
 <div class="card">
@@ -16,14 +16,14 @@
             <ul class="dense-list">
                 <li>集中查看当前项目下的缺陷记录</li>
                 <li>按需求、严重程度、状态筛选问题</li>
-                <li>把缺陷和需求、用例关联起来追踪</li>
+                <li>把缺陷和需求、用例、执行结果关联起来追踪</li>
             </ul>
         </div>
         <div class="info-panel">
             <h3>推荐起手动作</h3>
             <ul class="dense-list">
                 <li>先用筛选缩小到当前项目或需求范围</li>
-                <li>点击缺陷详情查看复现步骤和处理状态</li>
+                <li>进入缺陷详情查看复现步骤和处理状态</li>
                 <li>后续可把失败执行项沉淀为正式缺陷</li>
             </ul>
         </div>
@@ -68,7 +68,7 @@
                 <select name="severity">
                     <option value="">全部</option>
                     {% for item in ["critical", "major", "minor"] %}
-                    <option value="{{ item }}" {% if selected_severity == item %}selected{% endif %}>{{ item }}</option>
+                    <option value="{{ item }}" {% if selected_severity == item %}selected{% endif %}>{{ defect_severity_labels.get(item, item) }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -78,15 +78,15 @@
                 <select name="status">
                     <option value="">全部</option>
                     {% for item in ["open", "processing", "resolved", "closed"] %}
-                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ defect_status_labels.get(item, item) }}</option>
                     {% endfor %}
                 </select>
             </div>
         </div>
 
         <div class="page-actions">
-            <button class="btn" type="submit">筛选</button>
-            <a class="btn btn-secondary" href="/defects">重置</a>
+            <button class="btn" type="submit">应用筛选条件</button>
+            <a class="btn btn-secondary" href="/defects">清空筛选条件</a>
         </div>
     </form>
 </div>
@@ -115,9 +115,9 @@
                     <td>{{ defect.id }}</td>
                     <td>{{ defect.title }}</td>
                     <td>{{ defect.project.name if defect.project else "-" }}</td>
-                    <td>{{ defect.severity }}</td>
+                    <td>{{ defect_severity_labels.get(defect.severity, defect.severity) }}</td>
                     <td>{{ defect.priority }}</td>
-                    <td>{{ defect.status }}</td>
+                    <td>{{ defect_status_labels.get(defect.status, defect.status) }}</td>
                     <td>
                         {% if defect.requirement_id %}
                         <a href="/requirements/{{ defect.requirement_id }}">{{ defect.requirement.title if defect.requirement else defect.requirement_id }}</a>
@@ -133,7 +133,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <a class="btn btn-secondary" href="/defects/{{ defect.id }}">查看详情</a>
+                        <a class="btn btn-secondary" href="/defects/{{ defect.id }}">进入缺陷详情</a>
                     </td>
                 </tr>
                 {% endfor %}

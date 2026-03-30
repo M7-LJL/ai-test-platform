@@ -38,6 +38,11 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    case_reviews: Mapped[list["CaseReview"]] = relationship(
+        "CaseReview",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
     defects: Mapped[list["Defect"]] = relationship(
         "Defect",
         back_populates="project",
@@ -83,6 +88,10 @@ class Requirement(Base):
     )
     test_plans: Mapped[list["TestPlan"]] = relationship(
         "TestPlan",
+        back_populates="requirement",
+    )
+    case_reviews: Mapped[list["CaseReview"]] = relationship(
+        "CaseReview",
         back_populates="requirement",
     )
     defects: Mapped[list["Defect"]] = relationship(
@@ -169,6 +178,11 @@ class TestCase(Base):
     requirement: Mapped["Requirement | None"] = relationship("Requirement", back_populates="test_cases")
     plan_cases: Mapped[list["TestPlanCase"]] = relationship(
         "TestPlanCase",
+        back_populates="test_case",
+        cascade="all, delete-orphan",
+    )
+    review_items: Mapped[list["CaseReviewItem"]] = relationship(
+        "CaseReviewItem",
         back_populates="test_case",
         cascade="all, delete-orphan",
     )
@@ -260,6 +274,87 @@ class Defect(Base):
     requirement: Mapped["Requirement | None"] = relationship("Requirement", back_populates="defects")
     test_case: Mapped["TestCase | None"] = relationship("TestCase", back_populates="defects")
     test_plan_case: Mapped["TestPlanCase | None"] = relationship("TestPlanCase", back_populates="defects")
+
+
+class CaseReview(Base):
+    __tablename__ = "case_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    requirement_id: Mapped[int | None] = mapped_column(
+        ForeignKey("requirements.id"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="draft", nullable=False)
+    initiator_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="case_reviews")
+    requirement: Mapped["Requirement | None"] = relationship("Requirement", back_populates="case_reviews")
+    items: Mapped[list["CaseReviewItem"]] = relationship(
+        "CaseReviewItem",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="CaseReviewItem.sort_order",
+    )
+    logs: Mapped[list["CaseReviewLog"]] = relationship(
+        "CaseReviewLog",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="CaseReviewLog.created_at",
+    )
+
+
+class CaseReviewItem(Base):
+    __tablename__ = "case_review_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("case_reviews.id"), nullable=False, index=True)
+    test_case_id: Mapped[int] = mapped_column(ForeignKey("test_cases.id"), nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    case_title_snapshot: Mapped[str] = mapped_column(String(200), nullable=False)
+    priority_snapshot: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    item_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    decision: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    review: Mapped["CaseReview"] = relationship("CaseReview", back_populates="items")
+    test_case: Mapped["TestCase"] = relationship("TestCase", back_populates="review_items")
+    logs: Mapped[list["CaseReviewLog"]] = relationship(
+        "CaseReviewLog",
+        back_populates="review_item",
+    )
+
+
+class CaseReviewLog(Base):
+    __tablename__ = "case_review_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("case_reviews.id"), nullable=False, index=True)
+    review_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("case_review_items.id"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    operator_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    review: Mapped["CaseReview"] = relationship("CaseReview", back_populates="logs")
+    review_item: Mapped["CaseReviewItem | None"] = relationship("CaseReviewItem", back_populates="logs")
 
 
 

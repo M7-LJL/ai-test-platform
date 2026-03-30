@@ -288,7 +288,7 @@
             <div class="req-meta-list">
                 <span class="req-meta-chip">所属项目：{{ requirement.project.name }}</span>
                 <span class="req-meta-chip">创建时间：{{ requirement.created_at }}</span>
-                <span class="req-meta-chip">当前状态：{{ requirement.analysis_status or "draft" }}</span>
+                <span class="req-meta-chip">当前状态：{{ requirement_status_labels.get(requirement.analysis_status or "draft", requirement.analysis_status or "draft") }}</span>
             </div>
 
             <div class="req-feedback-stack">
@@ -335,11 +335,12 @@
             <div class="req-action-section">
                 <div class="req-action-label">关联产出</div>
                 <div class="req-action-row">
-                    <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}/xmind-markdown">导出 Xmind Markdown</a>
-                    <a class="btn btn-secondary" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入 Markdown 用例</a>
-                    <a class="btn btn-secondary" href="/testcases?requirement_id={{ requirement.id }}">查看关联用例</a>
-                    <a class="btn btn-secondary" href="/plans?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看关联计划</a>
-                    <a class="btn btn-secondary" href="/defects?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看关联缺陷</a>
+                    <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}/xmind-markdown">导出用例脑图 Markdown</a>
+                    <a class="btn btn-secondary" href="/testcases/import-markdown?requirement_id={{ requirement.id }}">导入现有测试用例</a>
+                    <a class="btn btn-secondary" href="/testcases?requirement_id={{ requirement.id }}">查看需求下的用例</a>
+                    <a class="btn btn-secondary" href="/case-reviews?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}&auto_select_requirement_cases=true&prefill_title={{ requirement.title | urlencode }}%20%E7%94%A8%E4%BE%8B%E8%AF%84%E5%AE%A1&prefill_summary=%E5%B7%B2%E8%87%AA%E5%8A%A8%E5%B8%A6%E5%87%BA%E5%BD%93%E5%89%8D%E9%9C%80%E6%B1%82%E4%B8%8B%E7%9A%84%E5%85%A8%E9%83%A8%E7%94%A8%E4%BE%8B%EF%BC%8C%E8%AF%B7%E9%80%90%E6%9D%A1%E7%A1%AE%E8%AE%A4%E3%80%82">发起该需求的用例评审</a>
+                    <a class="btn btn-secondary" href="/plans?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看需求下的计划</a>
+                    <a class="btn btn-secondary" href="/defects?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">查看需求下的缺陷</a>
                 </div>
             </div>
 
@@ -347,7 +348,7 @@
                 <div class="req-action-label">页面跳转</div>
                 <div class="req-action-row">
                     <a class="btn btn-secondary" href="/projects/{{ requirement.project.id }}">返回项目详情</a>
-                    <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+                    <a class="btn btn-secondary" href="/projects">返回项目工作台</a>
                 </div>
             </div>
         </div>
@@ -371,12 +372,17 @@
                 <a class="req-summary-item metric-card-link" href="#review-form">
                     <span class="metric-label">人工确认状态</span>
                     <strong class="metric-value">{% if review_ready %}已完成{% else %}待处理{% endif %}</strong>
-                    <span class="metric-note">{{ requirement.analysis_status or "draft" }}</span>
+                    <span class="metric-note">{{ requirement_status_labels.get(requirement.analysis_status or "draft", requirement.analysis_status or "draft") }}</span>
                 </a>
                 <a class="req-summary-item metric-card-link" href="/plans?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">
                     <span class="metric-label">测试计划</span>
                     <strong class="metric-value">进入</strong>
-                    <span class="metric-note">跳到执行中心</span>
+                    <span class="metric-note">跳到执行工作台</span>
+                </a>
+                <a class="req-summary-item metric-card-link" href="/case-reviews?project_id={{ requirement.project.id }}&requirement_id={{ requirement.id }}">
+                    <span class="metric-label">用例评审</span>
+                    <strong class="metric-value">进入</strong>
+                    <span class="metric-note">发起并执行评审</span>
                 </a>
             </div>
         </aside>
@@ -425,7 +431,7 @@
             <p class="muted" style="margin: 6px 0 0;">已完成 {% if workflow %}{{ wf_stage_list | selectattr('status', 'equalto', 'completed') | list | length }}/{{ wf_stage_list | length }}{% else %}0/0{% endif %} 个阶段，下一步按当前推荐继续即可。</p>
         </div>
         <div class="req-workflow-summary-meta">
-            <span class="req-workflow-pill">当前状态：{{ requirement.analysis_status or "draft" }}</span>
+            <span class="req-workflow-pill">当前状态：{{ requirement_status_labels.get(requirement.analysis_status or "draft", requirement.analysis_status or "draft") }}</span>
             {% if workflow and workflow.current_stage %}
             <span class="req-workflow-pill">当前阶段：{{ stage_labels.get(workflow.current_stage, workflow.current_stage) }}</span>
             {% endif %}
@@ -480,7 +486,7 @@
                 </label>
                 <textarea name="input_content" rows="6" style="font-size: 13px;">{{ s.input_content or '' }}</textarea>
                 <div style="display: flex; gap: 10px; margin-top: 8px;">
-                    <button type="submit" class="btn btn-secondary" style="font-size: 13px;">保存输入</button>
+                    <button type="submit" class="btn btn-secondary" style="font-size: 13px;">保存阶段输入</button>
                 </div>
             </form>
 
@@ -499,7 +505,7 @@
                         <form method="POST" action="/workflow/{{ workflow.id }}/stage/{{ s.stage_type }}/save">
                             <input type="hidden" name="input_content" value="{{ s.input_content or '' }}">
                             <textarea name="output_content" rows="14" style="font-family: monospace; font-size: 13px;" id="wf-raw-text-{{ s.stage_type }}">{{ s.output_content }}</textarea>
-                            <button type="submit" class="btn btn-secondary" style="font-size: 13px; margin-top: 8px;">保存修改</button>
+                            <button type="submit" class="btn btn-secondary" style="font-size: 13px; margin-top: 8px;">保存阶段产出</button>
                         </form>
                     </div>
                 </div>
@@ -724,8 +730,8 @@
                         <input type="hidden" class="point-test-point-id" value="{{ point.test_point_id or point.id or '' }}">
                     </div>
                     <div class="review-cell review-cell-actions">
-                        <button type="button" class="btn btn-ghost btn-edit" onclick="togglePointEdit(this)">编辑</button>
-                        <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存</button>
+                        <button type="button" class="btn btn-ghost btn-edit" onclick="togglePointEdit(this)">修改测试点</button>
+                        <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存测试点</button>
                         <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelPointEdit(this)" style="display: none;">取消</button>
                         <button type="button" class="btn btn-secondary" style="background: #fef2f2; color: #991b1b; border-color: #fecaca;" onclick="deletePointRow(this)">删除</button>
                     </div>
@@ -789,7 +795,7 @@
         {% endif %}
 
         <div class="page-actions" style="margin-top: 16px;">
-            <button class="btn" type="submit" style="padding: 12px 28px; font-size: 15px;">保存人工确认</button>
+            <button class="btn" type="submit" style="padding: 12px 28px; font-size: 15px;">保存测试点确认结果</button>
         </div>
     </form>
 </div>
@@ -1025,8 +1031,8 @@
                 <input type="hidden" class="point-test-point-id" value="">
             </div>
             <div class="review-cell review-cell-actions">
-                <button type="button" class="btn btn-ghost btn-edit" onclick="togglePointEdit(this)">编辑</button>
-                <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存</button>
+                <button type="button" class="btn btn-ghost btn-edit" onclick="togglePointEdit(this)">修改测试点</button>
+                <button type="button" class="btn btn-secondary btn-save" onclick="savePointEdit(this)" style="display: none;">保存测试点</button>
                 <button type="button" class="btn btn-secondary btn-cancel" onclick="cancelPointEdit(this)" style="display: none;">取消</button>
                 <button type="button" class="btn btn-secondary" style="background: #fef2f2; color: #991b1b; border-color: #fecaca;" onclick="deletePointRow(this)">删除</button>
             </div>

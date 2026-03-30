@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base, engine, ensure_application_schema, get_db
 from app.models import Defect, Project, Requirement, TestCase, TestPlan, TestPlanCase, TestWorkflow
+from app.routers.case_reviews import router as case_reviews_router
 from app.routers.defects import router as defects_router
 from app.routers.plans import router as plans_router
 from app.routers.projects import router as projects_router
@@ -43,6 +44,7 @@ app.include_router(testcases_router)
 app.include_router(workflow_router)
 app.include_router(defects_router)
 app.include_router(plans_router)
+app.include_router(case_reviews_router)
 
 
 def _build_trend_series(records: list[object], days: int = 7) -> tuple[list[str], list[int]]:

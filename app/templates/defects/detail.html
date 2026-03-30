@@ -7,15 +7,15 @@
     <h1>缺陷 #{{ defect.id }}</h1>
     <p class="muted">所属项目：{{ defect.project.name if defect.project else "-" }}</p>
     <div class="page-actions">
-        <a class="btn btn-secondary" href="/defects">返回缺陷中心</a>
+        <a class="btn btn-secondary" href="/defects">返回缺陷工作台</a>
         {% if defect.requirement_id %}
-        <a class="btn btn-secondary" href="/requirements/{{ defect.requirement_id }}">查看关联需求</a>
+        <a class="btn btn-secondary" href="/requirements/{{ defect.requirement_id }}">进入关联需求</a>
         {% endif %}
         {% if defect.test_case_id %}
         <a class="btn btn-secondary" href="/testcases/{{ defect.test_case_id }}/edit">查看关联用例</a>
         {% endif %}
         {% if defect.test_plan_case_id and defect.test_plan_case and defect.test_plan_case.plan %}
-        <a class="btn btn-secondary" href="/plans/{{ defect.test_plan_case.plan_id }}">返回测试计划</a>
+        <a class="btn btn-secondary" href="/plans/{{ defect.test_plan_case.plan_id }}">返回执行详情</a>
         {% endif %}
     </div>
 </div>
@@ -30,7 +30,7 @@
                 <label>严重程度</label>
                 <select name="severity">
                     {% for item in ["critical", "major", "minor"] %}
-                    <option value="{{ item }}" {% if defect.severity == item %}selected{% endif %}>{{ item }}</option>
+                    <option value="{{ item }}" {% if defect.severity == item %}selected{% endif %}>{{ defect_severity_labels.get(item, item) }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -48,7 +48,7 @@
                 <label>状态</label>
                 <select name="status">
                     {% for item in ["open", "processing", "resolved", "closed"] %}
-                    <option value="{{ item }}" {% if defect.status == item %}selected{% endif %}>{{ item }}</option>
+                    <option value="{{ item }}" {% if defect.status == item %}selected{% endif %}>{{ defect_status_labels.get(item, item) }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -64,7 +64,7 @@
         <textarea name="actual_result" rows="4">{{ defect.actual_result or "" }}</textarea>
 
         <div class="page-actions">
-            <button class="btn" type="submit">保存缺陷</button>
+            <button class="btn" type="submit">提交缺陷变更</button>
         </div>
     </form>
 </div>
@@ -106,7 +106,7 @@
     <div class="panel-grid">
         <div class="info-panel">
             <h3>执行结果</h3>
-            <p class="muted">状态：{{ defect.test_plan_case.run_status }}</p>
+            <p class="muted">状态：{{ {"untested": "未执行", "passed": "通过", "failed": "失败", "blocked": "阻塞"}.get(defect.test_plan_case.run_status, defect.test_plan_case.run_status) }}</p>
             <p class="muted">执行人：{{ defect.test_plan_case.executed_by or "-" }}</p>
             <p class="muted">
                 执行时间：

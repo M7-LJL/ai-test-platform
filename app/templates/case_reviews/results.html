@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}评审结果{% endblock %}
+{% block page_title %}评审结果{% endblock %}
+{% block page_subtitle %}查看已完成评审单的通过、需修改和拒绝情况。{% endblock %}
+
+{% block content %}
+<div class="card">
+    <form method="get" action="/case-reviews/results">
+        <div class="panel-grid">
+            <div>
+                <label>项目</label>
+                <select name="project_id">
+                    <option value="">全部项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="page-actions">
+            <button class="btn" type="submit">应用筛选条件</button>
+            <a class="btn btn-secondary" href="/case-reviews/results">清空筛选条件</a>
+            <a class="btn btn-secondary" href="/case-reviews">返回用例评审台</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>评审结论列表</h2>
+    {% if case_reviews %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>评审单</th>
+                    <th>项目</th>
+                    <th>结果概览</th>
+                    <th>完成时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for review in case_reviews %}
+                {% set stats = build_review_stats(review.items) %}
+                <tr>
+                    <td>
+                        <strong>{{ review.title }}</strong>
+                        <div class="cell-subtext">{{ review.summary or "未填写评审说明" }}</div>
+                    </td>
+                    <td>{{ review.project.name if review.project else "-" }}</td>
+                    <td>
+                        通过 {{ stats.approved }} / 需修改 {{ stats.needs_update }} / 拒绝 {{ stats.rejected }}
+                    </td>
+                    <td>{{ review.completed_at.strftime('%Y-%m-%d %H:%M') if review.completed_at else "-" }}</td>
+                    <td><a class="btn btn-secondary" href="/case-reviews/{{ review.id }}">查看评审详情</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前还没有已完成的评审结果。</p>
+    {% endif %}
+</div>
+{% endblock %}

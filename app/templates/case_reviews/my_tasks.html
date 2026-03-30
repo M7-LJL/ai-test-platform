@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}我的任务{% endblock %}
+{% block page_title %}我的任务{% endblock %}
+{% block page_subtitle %}查看分配给当前评审人的待处理评审单和未完成评审项。{% endblock %}
+
+{% block content %}
+<div class="metric-grid">
+    <div class="metric-card">
+        <div>
+            <span class="metric-label">待处理评审单</span>
+            <strong class="metric-value">{{ pending_review_count }}</strong>
+            <span class="metric-note">状态为 `pending / in_review` 的评审单</span>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div>
+            <span class="metric-label">待处理评审项</span>
+            <strong class="metric-value">{{ pending_item_count }}</strong>
+            <span class="metric-note">尚未给出最终结论的用例条目</span>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" action="/case-reviews/my-tasks">
+        <div class="panel-grid">
+            <div>
+                <label>评审人</label>
+                <input type="text" name="reviewer_name" value="{{ reviewer_name }}" placeholder="例如：QA-李四">
+            </div>
+        </div>
+        <div class="page-actions">
+            <button class="btn" type="submit">查看我的评审任务</button>
+            <a class="btn btn-secondary" href="/case-reviews/my-tasks">清空筛选条件</a>
+            <a class="btn btn-secondary" href="/case-reviews">返回用例评审台</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>待处理评审单</h2>
+    {% if reviews %}
+    <div class="dashboard-list">
+        {% for review in reviews %}
+        {% set stats = build_review_stats(review.items) %}
+        <a class="dashboard-list-item" href="/case-reviews/{{ review.id }}">
+            <div>
+                <strong>{{ review.title }}</strong>
+                <p class="cell-subtext">
+                    {{ review.project.name if review.project else "-" }}
+                    {% if review.requirement %} · {{ review.requirement.title }}{% endif %}
+                    · 评审人 {{ review.reviewer_name or "未指定" }}
+                </p>
+                <p class="cell-subtext">
+                    待处理 {{ stats.pending }} 项 / 通过 {{ stats.approved }} / 需修改 {{ stats.needs_update }} / 拒绝 {{ stats.rejected }}
+                </p>
+            </div>
+            <div class="list-meta">
+                {{ review_status_labels.get(review.status, review.status) }}<br>
+                截止 {{ review.deadline_at.strftime('%Y-%m-%d %H:%M') if review.deadline_at else "-" }}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">当前条件下没有待处理评审任务。</p>
+    {% endif %}
+</div>
+{% endblock %}

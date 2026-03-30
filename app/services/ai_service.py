@@ -39,13 +39,17 @@ ANALYSIS_DIMENSIONS = (
     "角色/用户",
     "页面/入口",
     "操作/动作",
-    "接口/数据",
+    "数据结果/依赖数据",
     "状态/流程",
     "规则/约束",
     "非功能",
     "关联/依赖",
     "隐性需求/界面状态",
 )
+DIMENSION_ALIASES = {
+    "接口/数据": "数据结果/依赖数据",
+    "数据结果/依赖数据": "数据结果/依赖数据",
+}
 REAL_USER_SCENE_TAGS = (
     "误操作/反悔",
     "重复/连续操作",
@@ -57,6 +61,31 @@ REAL_USER_SCENE_TAGS = (
 )
 FUZZY_TERMS = ("尽快", "适量", "部分", "稍后", "及时", "若干", "尽量", "按需")
 NOISE_LINE_KEYWORDS = ("会议纪要", "待补充", "后续补齐", "暂不处理", "先这样", "仅供参考")
+PLACEHOLDER_TEXT_KEYWORDS = (
+    "依据输入摘要",
+    "根据输入摘要",
+    "建议模块",
+    "示例模块",
+    "占位",
+    "待补充",
+    "后续补充",
+    "请补充",
+    "自行补充",
+    "暂未明确",
+    "未明确",
+    "未提供",
+    "暂无",
+)
+GENERIC_SCENE_LABELS = (
+    "正常场景",
+    "异常场景",
+    "边界场景",
+    "用户场景",
+    "测试点",
+    "功能点",
+    "主流程",
+    "核心流程",
+)
 REPEAT_SCENE_KEYWORDS = ("首次", "第一次", "再次", "第二次", "重复", "连续", "多次", "重试", "再点", "重复提交")
 STATE_SCENE_KEYWORDS = ("草稿", "已提交", "审核中", "已通过", "已驳回", "已关闭", "已完成", "状态")
 RESULT_SCENE_KEYWORDS = ("成功", "失败", "拦截", "不展示", "不可", "禁止", "幂等", "提示")
@@ -141,6 +170,13 @@ CONDITION_PATTERNS = (
     r"^(对于.+?)[，,:：](.*)$",
     r"^(在.+?时)[，,:：]?(.*)$",
     r"^(.+?后)[，,:：](.*)$",
+)
+EXPLICIT_IDENTIFIER_PATTERNS = (
+    r"/api/[A-Za-z0-9/_\-]+",
+    r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*",
+    r"[A-Za-z_][A-Za-z0-9_]{2,}",
+    r"[a-z]+(?:_[a-z0-9]+){1,}",
+    r"[A-Z]{2,}-\d{2,}",
 )
 
 ANALYSIS_TOOL_SCHEMA: dict[str, Any] = {
@@ -402,6 +438,17 @@ def _clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip(" .。;；,，:-")
 
 
+def _normalize_dimension_label(value: str, default: str = "操作/动作") -> str:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return default
+    if cleaned in DIMENSION_ALIASES:
+        return DIMENSION_ALIASES[cleaned]
+    if cleaned in ANALYSIS_DIMENSIONS:
+        return cleaned
+    return default
+
+
 def _normalize_point(sentence: str) -> str:
     sentence = _clean_text(sentence)
     sentence = re.sub(r"^(用户|系统|页面|应用|平台)", "", sentence).strip()
@@ -441,18 +488,43 @@ def _normalize_source_refs(value: Any, *, fallback: str = "需求原文", limit:
     return [fallback]
 
 
+def _looks_like_placeholder_text(text: str) -> bool:
+    cleaned = re.sub(r"^验证", "", _clean_text(text)).strip()
+    if not cleaned:
+        return True
+    if cleaned in {"需求原文", "默认模块", "待确认", "未说明"}:
+        return True
+    if cleaned in GENERIC_SCENE_LABELS:
+        return True
+    if any(keyword in cleaned for keyword in PLACEHOLDER_TEXT_KEYWORDS):
+        return True
+    if len(cleaned) <= 6 and cleaned.endswith("场景"):
+        return True
+    return False
+
+
+def _has_meaningful_anchor(*values: str) -> bool:
+    return any(_clean_text(value) and not _looks_like_placeholder_text(value) for value in values)
+
+
 def _looks_like_explicit_identifier(text: str) -> bool:
     cleaned = _clean_text(text)
     if not cleaned:
         return False
-    patterns = (
-        r"/api/[A-Za-z0-9/_\-]+",
-        r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*",
-        r"[A-Za-z_][A-Za-z0-9_]{2,}",
-        r"[a-z]+(?:_[a-z0-9]+){1,}",
-        r"[A-Z]{2,}-\d{2,}",
-    )
-    return any(re.search(pattern, cleaned) for pattern in patterns)
+    return any(re.search(pattern, cleaned) for pattern in EXPLICIT_IDENTIFIER_PATTERNS)
+
+
+def _extract_explicit_identifiers(text: str) -> list[str]:
+    cleaned = _clean_text(text)
+    if not cleaned:
+        return []
+    identifiers: list[str] = []
+    for pattern in EXPLICIT_IDENTIFIER_PATTERNS:
+        for match in re.findall(pattern, cleaned):
+            identifier = _clean_text(match)
+            if identifier and identifier not in identifiers:
+                identifiers.append(identifier)
+    return identifiers
 
 
 def _anchored_or_pending(value: str, *evidence_texts: str, fallback: str = "待确认") -> str:
@@ -465,6 +537,27 @@ def _anchored_or_pending(value: str, *evidence_texts: str, fallback: str = "待�
     if cleaned in normalized_evidence:
         return cleaned
     return fallback
+
+
+def _sanitize_text_against_source(value: str, source_text: str, *, fallback: str = "待确认") -> str:
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return fallback
+
+    normalized_source = _clean_text(source_text).lower()
+    identifiers = [item for item in _extract_explicit_identifiers(cleaned) if item.lower() not in normalized_source]
+    if not identifiers:
+        return cleaned
+
+    sanitized = cleaned
+    for identifier in sorted(identifiers, key=len, reverse=True):
+        sanitized = re.sub(re.escape(identifier), fallback, sanitized, flags=re.IGNORECASE)
+
+    sanitized = re.sub(r"(待确认[\s/、，,;；]*){2,}", "待确认 ", sanitized)
+    sanitized = _clean_text(sanitized) or fallback
+    if sanitized == fallback:
+        return fallback
+    return sanitized
 
 
 def _contains_keyword(text: str, keywords: tuple[str, ...]) -> bool:
@@ -801,11 +894,12 @@ def _extract_structured_scope_items(content: str, title: str = "") -> list[dict[
         if not has_scope_table:
             continue
 
-        dimension = nearest_heading if nearest_heading in ANALYSIS_DIMENSIONS else ""
+        dimension = _normalize_dimension_label(nearest_heading, default="")
         if not dimension:
             for path_item in reversed(heading_path):
-                if path_item in ANALYSIS_DIMENSIONS:
-                    dimension = path_item
+                normalized_dimension = _normalize_dimension_label(path_item, default="")
+                if normalized_dimension:
+                    dimension = normalized_dimension
                     break
         if not dimension and any("测试范围" in item for item in heading_path):
             dimension = "操作/动作"
@@ -819,6 +913,10 @@ def _extract_structured_scope_items(content: str, title: str = "") -> list[dict[
             priority = _table_row_get(row, "优先级")
             notes = _table_row_get(row, "备注")
             if not name:
+                continue
+            if _looks_like_placeholder_text(name):
+                continue
+            if not _has_meaningful_anchor(name, focus, source, notes):
                 continue
             key = (dimension, name, source or notes)
             if key in seen:
@@ -862,6 +960,10 @@ def _extract_structured_test_points(content: str, title: str = "") -> list[dict[
             module = _table_row_get(row, "对应功能", "模块") or fallback_module
             source = _table_row_get(row, "需求来源", "对应需求", "来源")
             if not title_text:
+                continue
+            if _looks_like_placeholder_text(title_text):
+                continue
+            if not _has_meaningful_anchor(title_text, source, module):
                 continue
             category = _infer_semantic_category(title_text, _classify_point(title_text))
             key = (module, title_text)
@@ -980,6 +1082,8 @@ def _extract_rule_units(content: str, title: str = "") -> list[dict[str, Any]]:
         unit = _build_rule_unit(item)
         if not unit["source"]:
             continue
+        if _looks_like_placeholder_text(unit["source"]) or _looks_like_placeholder_text(unit["action"]):
+            continue
         key = (unit["module"], unit["source"])
         if key in seen:
             continue
@@ -1045,7 +1149,7 @@ def _infer_dimension(unit: dict[str, Any]) -> str:
     if unit["has_state"]:
         return "状态/流程"
     if unit["has_data"]:
-        return "接口/数据"
+        return "数据结果/依赖数据"
     if unit["has_config"]:
         return "规则/约束"
     if unit["has_result"]:
@@ -1178,6 +1282,60 @@ def _merge_similar_test_points(test_points: list[dict[str, Any]]) -> list[dict[s
     return merged_points[:36]
 
 
+def _is_low_signal_scope_item(scope_item: dict[str, Any]) -> bool:
+    title = _clean_text(str(scope_item.get("name", "")))
+    rule_summary = _clean_text(str(scope_item.get("rule_summary", "")))
+    source_refs = " ".join(_normalize_source_refs(scope_item.get("source_refs")))
+    page_or_entry = _clean_text(str(scope_item.get("page_or_entry", "")))
+    if _looks_like_placeholder_text(title):
+        return True
+    if not _has_meaningful_anchor(title, rule_summary, source_refs):
+        return True
+    if page_or_entry in {"需求原文", "待确认"} and not _has_meaningful_anchor(rule_summary, source_refs):
+        return True
+    return False
+
+
+def _should_add_user_scene_point(scope_item: dict[str, Any]) -> bool:
+    dimension = _clean_text(str(scope_item.get("dimension", "")))
+    summary_text = " ".join(
+        _clean_text(str(scope_item.get(key, "")))
+        for key in ("name", "rule_summary", "page_or_entry")
+    )
+    if dimension not in {"角色/用户", "状态/流程", "规则/约束", "隐性需求/界面状态"}:
+        return False
+    trigger_keywords = REPEAT_SCENE_KEYWORDS + STATE_SCENE_KEYWORDS + PERMISSION_KEYWORDS + (
+        "返回",
+        "刷新",
+        "中断",
+        "恢复",
+        "重入",
+        "跳转",
+    )
+    return _contains_keyword(summary_text, trigger_keywords)
+
+
+def _filter_generated_test_points(test_points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered_points: list[dict[str, Any]] = []
+    user_scene_count_by_module: dict[str, int] = {}
+    for point in test_points:
+        title = _clean_text(str(point.get("title", "")))
+        action = _clean_text(str(point.get("action", "")))
+        source_refs = " ".join(_normalize_source_refs(point.get("source_refs")))
+        if _looks_like_placeholder_text(title):
+            continue
+        if not _has_meaningful_anchor(title, action, source_refs):
+            continue
+        if str(point.get("type", "")) == "user_scene":
+            module = _clean_text(str(point.get("module", ""))) or "默认模块"
+            current_count = user_scene_count_by_module.get(module, 0)
+            if current_count >= 2:
+                continue
+            user_scene_count_by_module[module] = current_count + 1
+        filtered_points.append(point)
+    return filtered_points[:24]
+
+
 def _build_test_points_from_scope_items(scope_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     test_points: list[dict[str, Any]] = []
     seen_titles: set[str] = set()
@@ -1191,6 +1349,8 @@ def _build_test_points_from_scope_items(scope_items: list[dict[str, Any]]) -> li
         test_points.append(point)
 
     for index, scope_item in enumerate(scope_items, start=1):
+        if _is_low_signal_scope_item(scope_item):
+            continue
         base_title = scope_item["name"]
         base_source = scope_item["source_refs"]
         module = scope_item["module"]
@@ -1226,7 +1386,7 @@ def _build_test_points_from_scope_items(scope_items: list[dict[str, Any]]) -> li
             }
         )
 
-        if scope_item["dimension"] in {"接口/数据", "状态/流程", "规则/约束", "隐性需求/界面状态"}:
+        if scope_item["dimension"] in {"数据结果/依赖数据", "状态/流程", "规则/约束", "隐性需求/界面状态"}:
             append_point(
                 {
                     "id": f"TP{index:03d}-B",
@@ -1268,27 +1428,28 @@ def _build_test_points_from_scope_items(scope_items: list[dict[str, Any]]) -> li
                 }
             )
 
-        append_point(
-            {
-                "id": f"TP{index:03d}-U",
-                "scope_item_id": scope_item["id"],
-                "title": f"{base_title}需补充真实用户场景下的连续操作与中断恢复验证",
-                "type": "user_scene",
-                "category": "functional",
-                "module": module,
-                "role": role,
-                "page_or_entry": entry,
-                "preconditions": ["模拟真实用户连续点击、返回或刷新行为"],
-                "action": f"围绕{base_title}执行真实用户操作路径",
-                "verification_focus": ["重复请求结果一致", "返回后状态可恢复", "页面提示与数据一致"],
-                "user_scenario": True,
-                "user_scenario_tag": _scenario_tag_for_type("state" if scope_item["dimension"] == "状态/流程" else "normal"),
-                "priority": priority,
-                "source_refs": ["真实用户场景", *base_source][:4],
-            }
-        )
+        if _should_add_user_scene_point(scope_item):
+            append_point(
+                {
+                    "id": f"TP{index:03d}-U",
+                    "scope_item_id": scope_item["id"],
+                    "title": f"{base_title}需补充真实用户场景下的连续操作与中断恢复验证",
+                    "type": "user_scene",
+                    "category": "functional",
+                    "module": module,
+                    "role": role,
+                    "page_or_entry": entry,
+                    "preconditions": ["模拟真实用户连续点击、返回或刷新行为"],
+                    "action": f"围绕{base_title}执行真实用户操作路径",
+                    "verification_focus": ["重复请求结果一致", "返回后状态可恢复", "页面提示与数据一致"],
+                    "user_scenario": True,
+                    "user_scenario_tag": _scenario_tag_for_type("state" if scope_item["dimension"] == "状态/流程" else "normal"),
+                    "priority": priority,
+                    "source_refs": ["真实用户场景", *base_source][:4],
+                }
+            )
 
-    return _merge_similar_test_points(test_points)
+    return _filter_generated_test_points(_merge_similar_test_points(test_points))
 
 
 def _build_terms(content: str) -> list[dict[str, Any]]:
@@ -1340,7 +1501,7 @@ def _build_coverage_check(content: str, rule_units: list[dict[str, Any]], scope_
         "roles": _coverage_status("角色/用户" in dimensions or any(unit["actor"] for unit in rule_units)),
         "pages_entries": _coverage_status("页面/入口" in dimensions, partial_condition="页面" in text or "入口" in text),
         "actions": _coverage_status("操作/动作" in dimensions, partial_condition=bool(rule_units)),
-        "data_fields": _coverage_status("接口/数据" in dimensions, partial_condition=_contains_keyword(text, DATA_KEYWORDS)),
+        "data_fields": _coverage_status("数据结果/依赖数据" in dimensions, partial_condition=_contains_keyword(text, DATA_KEYWORDS)),
         "states_flows": _coverage_status("状态/流程" in dimensions, partial_condition=_contains_keyword(text, STATE_KEYWORDS)),
         "rules_constraints": _coverage_status("规则/约束" in dimensions, partial_condition=_contains_keyword(text, CONFIG_KEYWORDS + PERMISSION_KEYWORDS)),
         "non_functional": _coverage_status(False, partial_condition=_contains_keyword(text, ("性能", "兼容", "安全", "易用"))),
@@ -1745,9 +1906,7 @@ def _normalize_scope_items(value: Any, *, title: str = "") -> list[dict[str, Any
         name = _clean_text(str(row.get("name", "")))
         if not name or item_id in seen:
             continue
-        dimension = _clean_text(str(row.get("dimension", ""))) or "操作/动作"
-        if dimension not in ANALYSIS_DIMENSIONS:
-            dimension = "操作/动作"
+        dimension = _normalize_dimension_label(str(row.get("dimension", "")))
         rows.append(
             {
                 "id": item_id,
@@ -1915,6 +2074,138 @@ def _normalize_analysis_payload(payload: Any, *, title: str = "") -> dict[str, A
     }
 
 
+def _sanitize_analysis_payload_against_source(payload: dict[str, Any], source_text: str) -> dict[str, Any]:
+    normalized_source = _clean_text(source_text)
+    if not normalized_source:
+        return payload
+
+    def sanitize_list(values: list[str], *, fallback: str = "待确认") -> list[str]:
+        return [
+            _sanitize_text_against_source(value, normalized_source, fallback=fallback)
+            for value in values
+            if _clean_text(value)
+        ]
+
+    sanitized_payload = dict(payload)
+    summary = dict(sanitized_payload.get("summary", {}))
+    summary["system_flow"] = sanitize_list(summary.get("system_flow", []))
+    summary["core_rules"] = sanitize_list(summary.get("core_rules", []))
+    summary["main_risks"] = sanitize_list(summary.get("main_risks", []))
+    summary["test_focus"] = sanitize_list(summary.get("test_focus", []))
+    sanitized_payload["summary"] = summary
+    sanitized_payload["gaps"] = sanitize_list(sanitized_payload.get("gaps", []))
+    sanitized_payload["test_standards"] = sanitize_list(sanitized_payload.get("test_standards", []))
+
+    terms: list[dict[str, Any]] = []
+    for row in sanitized_payload.get("terms", []):
+        if not isinstance(row, dict):
+            continue
+        terms.append(
+            {
+                **row,
+                "term": _sanitize_text_against_source(str(row.get("term", "")), normalized_source),
+                "meaning": _sanitize_text_against_source(str(row.get("meaning", "")), normalized_source),
+                "source_refs": [
+                    _sanitize_text_against_source(str(ref), normalized_source)
+                    for ref in row.get("source_refs", [])
+                    if _clean_text(ref)
+                ] or ["需求原文"],
+            }
+        )
+    sanitized_payload["terms"] = terms
+
+    scope_items: list[dict[str, Any]] = []
+    for row in sanitized_payload.get("scope_items", []):
+        if not isinstance(row, dict):
+            continue
+        scope_items.append(
+            {
+                **row,
+                "module": _sanitize_text_against_source(str(row.get("module", "")), normalized_source),
+                "name": _sanitize_text_against_source(str(row.get("name", "")), normalized_source),
+                "page_or_entry": _sanitize_text_against_source(str(row.get("page_or_entry", "")), normalized_source),
+                "object": _sanitize_text_against_source(str(row.get("object", "")), normalized_source),
+                "rule_summary": _sanitize_text_against_source(str(row.get("rule_summary", "")), normalized_source),
+                "source_refs": [
+                    _sanitize_text_against_source(str(ref), normalized_source)
+                    for ref in row.get("source_refs", [])
+                    if _clean_text(ref)
+                ] or ["需求原文"],
+                "notes": _sanitize_text_against_source(str(row.get("notes", "")), normalized_source, fallback=""),
+            }
+        )
+    sanitized_payload["scope_items"] = scope_items
+
+    test_points: list[dict[str, Any]] = []
+    for row in sanitized_payload.get("test_points", []):
+        if not isinstance(row, dict):
+            continue
+        test_points.append(
+            {
+                **row,
+                "module": _sanitize_text_against_source(str(row.get("module", "")), normalized_source),
+                "title": _sanitize_text_against_source(str(row.get("title", "")), normalized_source),
+                "page_or_entry": _sanitize_text_against_source(str(row.get("page_or_entry", "")), normalized_source),
+                "action": _sanitize_text_against_source(str(row.get("action", "")), normalized_source),
+                "preconditions": [
+                    _sanitize_text_against_source(str(item), normalized_source)
+                    for item in row.get("preconditions", [])
+                    if _clean_text(item)
+                ],
+                "verification_focus": [
+                    _sanitize_text_against_source(str(item), normalized_source)
+                    for item in row.get("verification_focus", [])
+                    if _clean_text(item)
+                ],
+                "user_scenario_tag": _sanitize_text_against_source(str(row.get("user_scenario_tag", "")), normalized_source, fallback=""),
+                "source_refs": [
+                    _sanitize_text_against_source(str(ref), normalized_source)
+                    for ref in row.get("source_refs", [])
+                    if _clean_text(ref)
+                ] or ["需求原文"],
+            }
+        )
+    sanitized_payload["test_points"] = test_points
+
+    selected_points: list[dict[str, Any]] = []
+    for row in sanitized_payload.get("selected_points", []):
+        if not isinstance(row, dict):
+            continue
+        selected_points.append(
+            {
+                **row,
+                "module": _sanitize_text_against_source(str(row.get("module", "")), normalized_source),
+                "title": _sanitize_text_against_source(str(row.get("title", "")), normalized_source),
+                "context": _sanitize_text_against_source(str(row.get("context", "")), normalized_source),
+                "requirement_source": _sanitize_text_against_source(str(row.get("requirement_source", "")), normalized_source),
+            }
+        )
+    sanitized_payload["selected_points"] = selected_points
+
+    traceability: list[dict[str, Any]] = []
+    for row in sanitized_payload.get("traceability", []):
+        if not isinstance(row, dict):
+            continue
+        traceability.append(
+            {
+                **row,
+                "source_refs": [
+                    _sanitize_text_against_source(str(ref), normalized_source)
+                    for ref in row.get("source_refs", [])
+                    if _clean_text(ref)
+                ] or ["需求原文"],
+            }
+        )
+    sanitized_payload["traceability"] = traceability
+
+    consistency = dict(sanitized_payload.get("consistency_check", {}))
+    consistency["ambiguous_terms"] = sanitize_list(consistency.get("ambiguous_terms", []))
+    consistency["fuzzy_phrases"] = sanitize_list(consistency.get("fuzzy_phrases", []))
+    consistency["my_understanding"] = sanitize_list(consistency.get("my_understanding", []))
+    sanitized_payload["consistency_check"] = consistency
+    return sanitized_payload
+
+
 def can_use_llm() -> bool:
     return openai_client is not None
 
@@ -1933,10 +2224,16 @@ def call_llm_for_analysis(content: str) -> dict[str, Any]:
         "禁止发明输入中未出现的接口名、字段名、数据库表名、事件名、任务名、URL、Webhook、状态码或技术实现细节。"
         "如果输入没有明确给出这些信息，统一写“待确认”，不要凭经验补全。"
         "你必须按以下顺序完成分析："
-        "1）按功能点穷尽清单逐项遍历角色/用户、页面/入口、操作/动作、接口/数据、状态/流程、规则/约束、非功能、关联/依赖、隐性需求/界面状态；"
+        "测试大纲如果作为输入，应理解为测试视角的模块/功能/测试关注点拆解，而不是技术设计文档。"
+        "分析时要遵循：先拆模块，再拆功能，再拆测试关注点；同时覆盖异常、边界、权限、状态、依赖和非功能风险。"
+        "1）按功能点穷尽清单逐项遍历角色/用户、页面/入口、操作/动作、数据结果/依赖数据、状态/流程、规则/约束、非功能、关联/依赖、隐性需求/界面状态；"
         "2）补充真实用户使用场景，包括误操作、重复提交、中断恢复、弱网、输入粘贴、多端多态、用户差异；"
         "3）执行理解一致性检查，确保每个功能点和测试点都能回指原文来源，并列出术语、模糊表述和“我的理解是”。"
         "不要只做摘要提取，不要输出空洞表述。"
+        "如果输入中包含测试大纲，请把它当作业务范围和测试场景来源，不要把它自动升级成技术设计说明。"
+        "只有当原始需求或测试大纲里明确出现接口名、字段名、配置键、埋点名、实验组、日志字段时，才允许在输出中引用；没有出现就绝对不要联想补写。"
+        "若原文更偏业务需求，优先围绕业务模块、页面入口、用户动作、状态变化、规则约束、异常兜底和真实用户场景展开。"
+        "“数据结果/依赖数据”维度重点写需要核对的数据结果、缓存、配置命中、回流、埋点或依赖数据；不要为了凑维度硬写接口名或字段名。"
         "scope_items 和 test_points 必须具体、可测、可执行，并尽量带动作、对象、验证目标和 source_refs。"
         "category 只能是 functional、boundary、exception。"
         "review 字段固定返回空数组。"
@@ -2050,6 +2347,7 @@ def build_requirement_analysis(content: str, title: str = "", use_llm: bool = Fa
                     },
                 )
             normalized_payload = _normalize_analysis_payload(llm_payload, title=title)
+            normalized_payload = _sanitize_analysis_payload_against_source(normalized_payload, content)
             if normalized_payload.get("selected_points"):
                 normalized_payload["meta"]["used_llm"] = True
                 return normalized_payload
@@ -2247,7 +2545,7 @@ def render_requirement_analysis_markdown(payload: dict[str, Any], title: str = "
         ("角色/用户", coverage_check.get("roles")),
         ("页面/入口", coverage_check.get("pages_entries")),
         ("操作/动作", coverage_check.get("actions")),
-        ("接口/数据", coverage_check.get("data_fields")),
+        ("数据结果/依赖数据", coverage_check.get("data_fields")),
         ("状态/流程", coverage_check.get("states_flows")),
         ("规则/约束", coverage_check.get("rules_constraints")),
         ("非功能", coverage_check.get("non_functional")),

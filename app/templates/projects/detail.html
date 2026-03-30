@@ -11,9 +11,10 @@
     <p class="muted">项目 ID：{{ project.id }}</p>
     <p class="muted">创建时间：{{ project.created_at }}</p>
     <div class="page-actions">
-        <a class="btn" href="/requirements/new?project_id={{ project.id }}">新建需求（自动进入工作流）</a>
-        <a class="btn btn-secondary" href="/projects/{{ project.id }}/report">查看测试报告</a>
-        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+        <a class="btn" href="/requirements/new?project_id={{ project.id }}">录入新需求（自动进入工作流）</a>
+        <a class="btn btn-secondary" href="/case-reviews?project_id={{ project.id }}">进入用例评审台</a>
+        <a class="btn btn-secondary" href="/projects/{{ project.id }}/report">查看项目测试报告</a>
+        <a class="btn btn-secondary" href="/projects">返回项目工作台</a>
         <a class="btn btn-secondary" href="/">返回首页</a>
     </div>
 </div>
@@ -59,10 +60,10 @@
                 {% for requirement in requirements %}
                 <tr>
                     <td>{{ requirement.title }}</td>
-                    <td><span class="tag">{{ requirement.analysis_status }}</span></td>
+                    <td><span class="tag">{{ requirement_status_labels.get(requirement.analysis_status, requirement.analysis_status) }}</span></td>
                     <td>{{ requirement.created_at.strftime('%Y-%m-%d %H:%M') if requirement.created_at else "-" }}</td>
                     <td>
-                        <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}">查看需求</a>
+                        <a class="btn btn-secondary" href="/requirements/{{ requirement.id }}">进入需求工作台</a>
                     </td>
                 </tr>
                 {% endfor %}
@@ -109,7 +110,7 @@
                     </td>
                     <td>{{ wf.created_at.strftime('%Y-%m-%d %H:%M') if wf.created_at else "-" }}</td>
                     <td>
-                        <a class="btn btn-secondary" href="/workflow/{{ wf.id }}">进入工作流</a>
+                        <a class="btn btn-secondary" href="/workflow/{{ wf.id }}">进入测试工作流</a>
                     </td>
                 </tr>
                 {% endfor %}
@@ -131,6 +132,7 @@
                     <th>用例ID</th>
                     <th>标题</th>
                     <th>来源需求</th>
+                    <th>评审状态</th>
                     <th>操作</th>
                 </tr>
             </thead>
@@ -146,8 +148,9 @@
                         -
                         {% endif %}
                     </td>
+                    <td>{{ testcase_review_status_labels.get(testcase.review_status or "draft", testcase.review_status or "draft") }}</td>
                     <td>
-                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">编辑用例</a>
+                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">维护用例</a>
                     </td>
                 </tr>
                 {% endfor %}

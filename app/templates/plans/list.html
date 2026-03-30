@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}执行中心{% endblock %}
+{% block title %}执行工作台{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h1>执行中心</h1>
-    <p class="muted">查看测试计划、执行进度和结果统计。</p>
+    <h1>执行工作台</h1>
+    <p class="muted">查看测试计划、跟进执行进度，并沉淀执行结果。</p>
 </div>
 
 <div class="card">
@@ -14,17 +14,17 @@
         <div class="info-panel">
             <h3>这页做什么</h3>
             <ul class="dense-list">
-                <li>统一查看测试计划和执行进度</li>
-                <li>进入计划详情后记录每条用例的执行结果</li>
-                <li>跟踪当前计划是草稿、执行中还是已完成</li>
+                <li>统一查看测试计划和当前执行进度</li>
+                <li>进入执行详情后记录每条用例的执行结果</li>
+                <li>跟踪测试计划所处阶段和执行完成度</li>
             </ul>
         </div>
         <div class="info-panel">
             <h3>推荐起手动作</h3>
             <ul class="dense-list">
-                <li>如果还没有计划，可先创建一个空计划</li>
-                <li>如果已经在用例中心选好用例，可直接从那里批量建计划</li>
-                <li>进入计划详情后逐条填写通过、失败、阻塞结果</li>
+                <li>如果还没有计划，可先创建一份测试计划</li>
+                <li>如果已经在用例库选好用例，可直接从那里批量建计划</li>
+                <li>进入执行详情后逐条填写通过、失败、阻塞结果</li>
             </ul>
         </div>
         <div class="info-panel">
@@ -64,19 +64,19 @@
                 </select>
             </div>
             <div>
-                <label>状态</label>
+                <label>计划状态</label>
                 <select name="status">
                     <option value="">全部</option>
                     {% for item in ["draft", "in_progress", "completed"] %}
-                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ plan_status_labels.get(item, item) }}</option>
                     {% endfor %}
                 </select>
             </div>
         </div>
 
         <div class="page-actions">
-            <button class="btn" type="submit">筛选</button>
-            <a class="btn btn-secondary" href="/plans">重置</a>
+            <button class="btn" type="submit">应用筛选条件</button>
+            <a class="btn btn-secondary" href="/plans">清空筛选条件</a>
         </div>
     </form>
 </div>
@@ -126,7 +126,7 @@
         <input type="hidden" name="selected_case_ids" value="">
 
         <div class="page-actions">
-            <button class="btn" type="submit">创建空计划</button>
+            <button class="btn" type="submit">保存测试计划</button>
         </div>
     </form>
 </div>
@@ -161,11 +161,11 @@
                         {% endif %}
                     </td>
                     <td>{{ plan.owner or "-" }}</td>
-                    <td>{{ plan.status }}</td>
+                    <td>{{ plan_status_labels.get(plan.status, plan.status) }}</td>
                     <td>{{ plan.plan_cases | length }}</td>
                     <td>{{ plan.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>
-                        <a class="btn btn-secondary" href="/plans/{{ plan.id }}">查看详情</a>
+                        <a class="btn btn-secondary" href="/plans/{{ plan.id }}">进入执行详情</a>
                     </td>
                 </tr>
                 {% endfor %}

@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}用例评审台{% endblock %}
+{% block page_title %}用例评审台{% endblock %}
+{% block page_subtitle %}把待确认用例拉进评审单，统一执行评审并沉淀结果。{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>评审工作台</h2>
+    <p class="muted">先选中要评审的用例创建评审单，再进入评审执行页逐条给出结论。</p>
+</div>
+
+<div class="card">
+    <form method="get" action="/case-reviews">
+        <div class="panel-grid">
+            <div>
+                <label>项目</label>
+                <select name="project_id">
+                    <option value="">全部项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>需求</label>
+                <select name="requirement_id">
+                    <option value="">全部需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>{{ requirement.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>评审单状态</label>
+                <select name="status">
+                    <option value="">全部</option>
+                    {% for item in ["draft", "pending", "in_review", "completed", "cancelled"] %}
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ review_status_labels.get(item, item) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="page-actions">
+            <button class="btn" type="submit">应用筛选条件</button>
+            <a class="btn btn-secondary" href="/case-reviews">清空筛选条件</a>
+            <a class="btn btn-secondary" href="/case-reviews/my-tasks">我的任务</a>
+            <a class="btn btn-secondary" href="/case-reviews/results">查看评审结论汇总</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>创建评审单</h2>
+    <p class="muted">从下方候选用例里勾选范围，创建一张轻量评审单。编辑过的用例会重新走评审。</p>
+
+    <form method="post" action="/case-reviews/create" id="create-case-review-form">
+        <div class="panel-grid">
+            <div>
+                <label>所属项目</label>
+                <select name="project_id" required>
+                    <option value="">请选择项目</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>关联需求</label>
+                <select name="requirement_id">
+                    <option value="">不关联需求</option>
+                    {% for requirement in requirements %}
+                    <option value="{{ requirement.id }}" {% if selected_requirement_id == requirement.id %}selected{% endif %}>{{ requirement.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>评审人</label>
+                <input type="text" name="reviewer_name" value="{{ prefill_reviewer_name }}" placeholder="例如：QA-李四">
+            </div>
+            <div>
+                <label>发起人</label>
+                <input type="text" name="initiator_name" value="{{ prefill_initiator_name }}" placeholder="例如：QA-张三">
+            </div>
+            <div>
+                <label>截止时间</label>
+                <input type="datetime-local" name="deadline_at">
+            </div>
+            <div class="editor-field-wide">
+                <label>评审单标题</label>
+                <input type="text" name="title" value="{{ prefill_title }}" placeholder="例如：支付需求用例评审" required>
+            </div>
+            <div class="editor-field-wide">
+                <label>评审说明</label>
+                <textarea name="summary" rows="3" placeholder="说明本次评审范围、关注点和截止要求">{{ prefill_summary }}</textarea>
+            </div>
+        </div>
+
+        <input type="hidden" name="selected_case_ids" class="selected-case-ids-field" value="">
+
+        <div class="page-actions">
+            <button class="btn" type="submit">用已选用例创建评审单</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>候选用例</h2>
+    <p class="muted">“评审通过 / 已评审”表示已可进计划；“待评审 / 评审中 / 待修改 / 已驳回”表示仍需评审处理。</p>
+    {% if testcases %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="toggle-all-cases"></th>
+                    <th>用例ID</th>
+                    <th>标题</th>
+                    <th>项目</th>
+                    <th>需求</th>
+                    <th>优先级</th>
+                    <th>评审状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for testcase in testcases %}
+                <tr>
+                    <td><input type="checkbox" class="case-checkbox" value="{{ testcase.id }}"></td>
+                    <td>{{ testcase.case_id }}</td>
+                    <td>{{ testcase.title }}</td>
+                    <td>{{ testcase.project.name if testcase.project else "-" }}</td>
+                    <td>
+                        {% if testcase.requirement_id %}
+                        <a href="/requirements/{{ testcase.requirement_id }}">{{ testcase.requirement.title if testcase.requirement else testcase.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ testcase.priority or "-" }}</td>
+                    <td>{{ testcase_review_status_labels.get(testcase.review_status or "draft", testcase.review_status or "draft") }}</td>
+                    <td>
+                        <a class="btn btn-secondary" href="/testcases/{{ testcase.id }}/edit">维护用例</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前筛选范围内没有候选用例。</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>评审单列表</h2>
+    {% if case_reviews %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>评审单</th>
+                    <th>项目</th>
+                    <th>需求</th>
+                    <th>状态</th>
+                    <th>用例数</th>
+                    <th>评审人</th>
+                    <th>截止时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for review in case_reviews %}
+                <tr>
+                    <td>
+                        <strong>{{ review.title }}</strong>
+                        <div class="cell-subtext">{{ review.summary or "未填写评审说明" }}</div>
+                    </td>
+                    <td>{{ review.project.name if review.project else "-" }}</td>
+                    <td>
+                        {% if review.requirement_id %}
+                        <a href="/requirements/{{ review.requirement_id }}">{{ review.requirement.title if review.requirement else review.requirement_id }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ review_status_labels.get(review.status, review.status) }}</td>
+                    <td>{{ review.items | length }}</td>
+                    <td>{{ review.reviewer_name or "-" }}</td>
+                    <td>{{ review.deadline_at.strftime('%Y-%m-%d %H:%M') if review.deadline_at else "-" }}</td>
+                    <td><a class="btn btn-secondary" href="/case-reviews/{{ review.id }}">开始处理评审</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">当前还没有评审单。</p>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+    const hiddenFields = Array.from(document.querySelectorAll(".selected-case-ids-field"));
+    const checkboxes = Array.from(document.querySelectorAll(".case-checkbox"));
+    const toggleAll = document.getElementById("toggle-all-cases");
+    const shouldAutoSelectRequirementCases = {{ "true" if auto_select_requirement_cases else "false" }};
+
+    function syncSelectedIds() {
+        const value = checkboxes.filter(item => item.checked).map(item => item.value).join(",");
+        hiddenFields.forEach(field => {
+            field.value = value;
+        });
+    }
+
+    if (toggleAll) {
+        toggleAll.addEventListener("change", function () {
+            checkboxes.forEach(item => {
+                item.checked = toggleAll.checked;
+            });
+            syncSelectedIds();
+        });
+    }
+
+    checkboxes.forEach(item => {
+        item.addEventListener("change", syncSelectedIds);
+    });
+
+    if (shouldAutoSelectRequirementCases) {
+        checkboxes.forEach(item => {
+            item.checked = true;
+        });
+        if (toggleAll) {
+            toggleAll.checked = checkboxes.length > 0;
+        }
+        syncSelectedIds();
+    }
+})();
+</script>
+{% endblock %}

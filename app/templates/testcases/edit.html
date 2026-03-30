@@ -7,18 +7,20 @@
     <h1>编辑测试用例</h1>
     <p class="muted">用例ID：{{ testcase.case_id }}</p>
     <div class="page-actions">
+        <a class="btn btn-secondary" href="{{ redirect_to }}">返回上一页</a>
         {% if testcase.requirement_id %}
         <a class="btn btn-secondary" href="/requirements/{{ testcase.requirement_id }}">返回需求详情</a>
         {% endif %}
         {% if testcase.project_id %}
         <a class="btn btn-secondary" href="/projects/{{ testcase.project_id }}">返回项目详情</a>
         {% endif %}
-        <a class="btn btn-secondary" href="/projects">返回项目列表</a>
+        <a class="btn btn-secondary" href="/projects">返回项目工作台</a>
     </div>
 </div>
 
 <div class="card">
     <form method="post" action="/testcases/{{ testcase.id }}/edit">
+        <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
         <label for="title">标题</label>
         <input id="title" name="title" type="text" value="{{ testcase.title }}">
         <label for="suite_id">套件</label>
@@ -49,8 +51,8 @@
 
         <label for="status">状态</label>
         <select id="status" name="status">
-            {% for item in ["draft", "ready", "blocked", "done"] %}
-            <option value="{{ item }}" {% if (testcase.status or "draft") == item %}selected{% endif %}>{{ item }}</option>
+            {% for item in ["draft", "ready", "blocked", "in_progress", "completed"] %}
+            <option value="{{ item }}" {% if (testcase.status or "draft") == item %}selected{% endif %}>{{ testcase_status_labels.get(item, item) }}</option>
             {% endfor %}
         </select>
 

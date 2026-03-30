@@ -2,20 +2,21 @@
 
 {% block title %}首页总览{% endblock %}
 {% block page_title %}Web 测试总览{% endblock %}
-{% block page_subtitle %}把项目、需求、用例、执行和缺陷信息集中展示成后台首页。{% endblock %}
+{% block page_subtitle %}把项目、需求、用例评审、执行和缺陷信息集中展示成测试平台首页。{% endblock %}
 
 {% block content %}
+{% set dashboard_plan_status_labels = {"draft": "计划草稿", "in_progress": "执行中", "completed": "已完成"} %}
 <section class="hero-panel">
     <div class="hero-content">
         <span class="eyebrow">MVP Dashboard</span>
         <h1>你好，超级管理员</h1>
         <p class="muted">
-            当前首页已经切成后台工作台风格，先把核心业务入口和关键指标收拢到一屏内。
+            这里是测试平台总览页，用来快速进入项目、需求、评审、执行和缺陷几个核心工作台。
         </p>
         <div class="hero-actions">
-            <a class="btn" href="/projects">进入项目管理</a>
-            <a class="btn btn-secondary" href="/requirements/new">新建需求</a>
-            <a class="btn btn-secondary" href="/testcases">查看用例中心</a>
+            <a class="btn" href="/projects">进入项目工作台</a>
+            <a class="btn btn-secondary" href="/requirements/new">录入测试需求</a>
+            <a class="btn btn-secondary" href="/case-reviews">进入用例评审台</a>
         </div>
     </div>
     <div class="hero-meta">
@@ -46,29 +47,36 @@
     <a class="quick-link-card quick-link-project" href="/projects">
         <div class="quick-link-icon">P</div>
         <div>
-            <strong>项目管理</strong>
-            <p class="muted">管理项目范围与报告输出</p>
+            <strong>项目工作台</strong>
+            <p class="muted">管理项目范围并进入各项测试活动</p>
         </div>
     </a>
     <a class="quick-link-card quick-link-requirement" href="/requirements/new">
         <div class="quick-link-icon">R</div>
         <div>
-            <strong>需求工作流</strong>
-            <p class="muted">录入需求并推进分析流程</p>
+            <strong>需求工作台</strong>
+            <p class="muted">录入需求并推进测试分析流程</p>
+        </div>
+    </a>
+    <a class="quick-link-card quick-link-case" href="/case-reviews">
+        <div class="quick-link-icon">R</div>
+        <div>
+            <strong>用例评审台</strong>
+            <p class="muted">评审测试用例并形成执行准入</p>
         </div>
     </a>
     <a class="quick-link-card quick-link-case" href="/testcases">
         <div class="quick-link-icon">C</div>
         <div>
-            <strong>用例中心</strong>
-            <p class="muted">统一筛选、编辑和归类用例</p>
+            <strong>用例库</strong>
+            <p class="muted">统一筛选、维护和归类正式用例</p>
         </div>
     </a>
     <a class="quick-link-card quick-link-plan" href="/plans">
         <div class="quick-link-icon">E</div>
         <div>
-            <strong>执行中心</strong>
-            <p class="muted">查看计划进度与执行结果</p>
+            <strong>执行工作台</strong>
+            <p class="muted">查看计划进度并提交执行结果</p>
         </div>
     </a>
 </section>
@@ -224,7 +232,7 @@
                 <h2>最近计划</h2>
                 <p class="muted">跟进当前执行中的轮次</p>
             </div>
-            <a class="btn btn-secondary" href="/plans">进入执行中心</a>
+            <a class="btn btn-secondary" href="/plans">进入执行工作台</a>
         </div>
         <div class="dashboard-list">
             {% for plan in recent_plans %}
@@ -233,7 +241,7 @@
                     <strong>{{ plan.name }}</strong>
                     <p class="muted">{{ plan.project.name if plan.project else "未关联项目" }}</p>
                 </div>
-                <span class="tag">{{ plan.status }}</span>
+                <span class="tag">{{ dashboard_plan_status_labels.get(plan.status, plan.status) }}</span>
             </a>
             {% else %}
             <p class="muted">当前还没有测试计划。</p>
@@ -247,7 +255,7 @@
                 <h2>最近缺陷</h2>
                 <p class="muted">快速看到新出现的问题</p>
             </div>
-            <a class="btn btn-secondary" href="/defects">进入缺陷中心</a>
+            <a class="btn btn-secondary" href="/defects">进入缺陷工作台</a>
         </div>
         <div class="dashboard-list">
             {% for defect in recent_defects %}
@@ -256,7 +264,7 @@
                     <strong>{{ defect.title }}</strong>
                     <p class="muted">{{ defect.project.name if defect.project else "未关联项目" }}</p>
                 </div>
-                <span class="tag tag-accent">{{ defect.status }}</span>
+                <span class="tag tag-accent">{{ defect_status_labels.get(defect.status, defect.status) }}</span>
             </a>
             {% else %}
             <p class="muted">当前没有缺陷记录。</p>

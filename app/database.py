@@ -139,9 +139,19 @@ def ensure_application_schema() -> None:
             connection.execute(text(ddl))
 
 
-    from app.models import RequirementReviewPoint, TestWorkflow, WorkflowStage
+    from app.models import (
+        CaseReview,
+        CaseReviewItem,
+        CaseReviewLog,
+        RequirementReviewPoint,
+        TestWorkflow,
+        WorkflowStage,
+    )
 
     RequirementReviewPoint.__table__.create(bind=engine, checkfirst=True)
+    CaseReview.__table__.create(bind=engine, checkfirst=True)
+    CaseReviewItem.__table__.create(bind=engine, checkfirst=True)
+    CaseReviewLog.__table__.create(bind=engine, checkfirst=True)
     TestWorkflow.__table__.create(bind=engine, checkfirst=True)
     WorkflowStage.__table__.create(bind=engine, checkfirst=True)
 
